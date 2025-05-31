@@ -133,18 +133,19 @@ function App() {
             streams['camera_' + camId] = camStream;
             streamKeys.push('camera_' + camId);
           } catch (err: any) {
-            // Try requesting permission for camera first, then retry with deviceId
-            try {
-              await navigator.mediaDevices.getUserMedia({ video: true });
-              // Retry with specific camera
-              const camStream = await navigator.mediaDevices.getUserMedia({
-                video: { deviceId: { exact: camId } },
-                audio: false,
-              });
-              streams['camera_' + camId] = camStream;
-              streamKeys.push('camera_' + camId);
-            } catch (finalErr: any) {
-              alert('Could not get camera stream for device: ' + camId + '\nError: ' + (finalErr && finalErr.message ? finalErr.message : finalErr));
+            if (err.name === 'OverconstrainedError') {
+              try {
+                const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                alert('Selected camera device is not available or does not support required constraints. Falling back to default camera.');
+                streams['camera_' + camId] = fallbackStream;
+                streamKeys.push('camera_' + camId);
+              } catch (fallbackErr: any) {
+                alert('Could not get any camera stream.\nError: ' + (fallbackErr?.message || fallbackErr));
+                cleanupRecording();
+                return;
+              }
+            } else {
+              alert('Could not get camera stream for device: ' + camId + '\nError: ' + (err?.message || err));
               cleanupRecording();
               return;
             }
