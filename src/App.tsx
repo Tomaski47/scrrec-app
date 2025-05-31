@@ -4,6 +4,8 @@ import React, { useRef, useState, useEffect } from 'react';
 
 function App() {
   const ffmpeg = useRef<any>(null);
+  const dirHandleRef = useRef<any>(null);
+
   const [isConverting, setIsConverting] = useState(false);
 
   // Video/audio quality options
@@ -82,6 +84,9 @@ function App() {
 
   const startRecording = async () => {
     try {
+      // First clean up any existing recording state
+      cleanupRecording();
+      
       // Helper to get resolution constraints
       const getResolutionConstraints = () => {
         switch (videoResolution) {
@@ -168,12 +173,11 @@ function App() {
       const newVideoUrls: {[key:string]: string | null} = {...videoUrls};
       const newAudioUrls: {[key:string]: string | null} = {...audioUrls};
 
-      // For each camera stream, combine with selected mics if enabled
+      // For each camera stream
       for (const camKey of Object.keys(streams).filter(k => k.startsWith('camera_'))) {
         const camStream = streams[camKey];
         let finalStream = camStream;
         if (recordOptions.mic && recordOptions.micIds && recordOptions.micIds.length > 0) {
-          // Combine all selected mic tracks with video
           const audioTracks = recordOptions.micIds.flatMap(mid =>
             micStreams['mic_' + mid]?.getAudioTracks() ?? []
           );
@@ -189,18 +193,23 @@ function App() {
           audioBitsPerSecond: recordOptions.mic ? bitsPerSecond[audioQuality] : 0,
         };
         newChunks[camKey] = [];
-        const recorder = new MediaRecorder(finalStream, recorderOptions);
+        const recorder = new MediaRecorder(finalStream, {
+          ...recorderOptions,
+          timeslice: 1000, // Get data every second
+        });
         recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) {
+          if (e.data && e.data.size > 0) {
             newChunks[camKey].push(e.data);
+            setRecordingSize(prevSize => prevSize + e.data.size);
           }
         };
         recorder.onstop = () => {
           const videoBlob = new Blob(newChunks[camKey], { type: 'video/webm' });
           newVideoUrls[camKey] = URL.createObjectURL(videoBlob);
-          setVideoUrls({...newVideoUrls});
+          setVideoUrls({ ...newVideoUrls });
         };
         newMediaRecorders[camKey] = recorder;
+        recorder.start(1000); // <-- Only here, not in a later loop
       }
 
       // For each screen stream, combine with selected mics if enabled
@@ -222,10 +231,11 @@ function App() {
           audioBitsPerSecond: recordOptions.mic ? bitsPerSecond[audioQuality] : 0,
         };
         newChunks['screen'] = [];
-        const recorder = new MediaRecorder(finalStream, recorderOptions);
+        const recorder = new MediaRecorder(finalStream, recorderOptions); // Remove timeslice here
         recorder.ondataavailable = (e) => {
           if (e.data.size > 0) {
             newChunks['screen'].push(e.data);
+            setRecordingSize(prevSize => prevSize + e.data.size);
           }
         };
         recorder.onstop = () => {
@@ -234,7 +244,9 @@ function App() {
           setVideoUrls({...newVideoUrls});
         };
         newMediaRecorders['screen'] = recorder;
-      }
+        recorder.start(1000); // <-- Only here, not in a later loop
+      } 
+
 
       // For each mic stream, record audio-only
       if (recordOptions.mic && recordOptions.micIds && recordOptions.micIds.length > 0) {
@@ -259,44 +271,22 @@ function App() {
             setAudioUrls({...newAudioUrls});
           };
           newMediaRecorders[micKey] = recorder;
+          recorder.start(1000); // <-- Only here, not in a later loop
         }
-      }
-
-      // Start all recorders
-      for (const key of Object.keys(newMediaRecorders)) {
-        newMediaRecorders[key].start();
       }
 
       setMediaRecorders(newMediaRecorders);
       chunks.current = newChunks;
       setRecording(true);
     } catch (err) {
+      console.error('Recording error:', err);
+      cleanupRecording(); // Clean up on error
       alert('Could not start recording: ' + err);
     }
   };
 
-  // Directory handle cache for saving files in a session
-  const dirHandleRef = useRef<any>(null);
-
   const stopRecording = () => {
-    // Stop all recorders
-    Object.values(mediaRecorders).forEach(recorder => {
-      if (recorder && recorder.state !== 'inactive') {
-        recorder.stop();
-      }
-    });
-    setRecording(false);
-    setMediaRecorders({});
-
-    // Stop all media tracks to release mic/camera
-    Object.values(mediaRecorders).forEach(recorder => {
-      const stream = recorder?.stream;
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-    });
-    // Do NOT auto-save files here! User must save manually via UI buttons.
-    // (saveAllFiles(); call removed/commented out)
+    cleanupRecording();
   };
 
   // "Save As" handler using File System Access API or fallback
@@ -432,6 +422,129 @@ function App() {
     else return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
+  // Add with your other state declarations
+  const [recordingSize, setRecordingSize] = useState(0);
+
+  // Replace your formatSize function with this:
+  function formatSize(bytes: number) {
+    const mb = bytes / (1024 * 1024);
+    if (mb < 1 && mb > 0) {
+      return `${mb.toFixed(2)} MB`;
+    }
+    return `${Math.round(mb)} MB`;
+  }
+
+  // Add this helper function near your other format functions
+  function getFileSize(url: string | null): number {
+    if (!url) return 0;
+    const videoElement = document.createElement('video');
+    videoElement.src = url;
+    return videoElement.duration * (videoElement.videoWidth * videoElement.videoHeight * 3) / 8;
+  }
+
+  // (Optional) Adjust calculateEstimatedSize for more realistic webm bitrates:
+  function calculateEstimatedSize(seconds: number, options: {
+    hasVideo: boolean,
+    videoResolution: string,
+    hasAudio: boolean,
+    audioQuality: string
+  }): number {
+    let totalBitsPerSecond = 0;
+
+    // Use more typical MediaRecorder bitrates for webm/vp8
+    if (options.hasVideo) {
+      switch (options.videoResolution) {
+        case '1080p':
+          totalBitsPerSecond += 1_500_000; // 1.5 Mbps
+          break;
+        case '720p':
+          totalBitsPerSecond += 1_000_000; // 1 Mbps
+          break;
+        case '480p':
+          totalBitsPerSecond += 600_000; // 600 kbps
+          break;
+        case '360p':
+          totalBitsPerSecond += 400_000; // 400 kbps
+          break;
+        default: // fullscreen
+          totalBitsPerSecond += 1_200_000; // 1.2 Mbps
+          break;
+      }
+    }
+
+    // Audio bitrate (webm/opus is usually 64-128kbps)
+    if (options.hasAudio) {
+      switch (options.audioQuality) {
+        case 'best':
+          totalBitsPerSecond += 128_000;
+          break;
+        case 'mid':
+          totalBitsPerSecond += 96_000;
+          break;
+        case 'low':
+          totalBitsPerSecond += 64_000;
+          break;
+      }
+    }
+
+    const bytesPerSecond = totalBitsPerSecond / 8;
+    return Math.round(bytesPerSecond * seconds);
+  }
+
+  // Add this cleanup function at the top of your App component
+  const cleanupRecording = () => {
+    console.log("Cleaning up recording...");
+
+    // Stop each active recorder (only if its state is "recording")
+    Object.keys(mediaRecorders).forEach(key => {
+      const recorder = mediaRecorders[key];
+      if (recorder && recorder.state === "recording") {
+        try {
+          recorder.stop();
+          console.log(`Stopped recorder ${key}`);
+        } catch (error) {
+          console.error(`Error stopping recorder ${key}:`, error);
+        }
+      }
+    });
+
+    // Now stop all tracks of each recorder's associated stream
+    Object.keys(mediaRecorders).forEach(key => {
+      const recorder = mediaRecorders[key];
+      // In our setup, we didn’t store the stream directly on the recorder,
+      // so you might want to also keep a ref (or add it to mediaRecorders) when starting.
+      // Here we try to stop any track if available.
+      const stream = (recorder as any)?.stream as MediaStream | undefined;
+      if (stream) {
+        stream.getTracks().forEach(track => {
+          try {
+            track.stop();
+            console.log(`Stopped track ${track.kind} of recorder ${key}`);
+          } catch (error) {
+            console.error(`Error stopping track in recorder ${key}:`, error);
+          }
+        });
+      }
+    });
+
+    // Reset state variables
+    setMediaRecorders({});
+    setRecording(false);
+    setRecordingSize(0);
+  };
+
+  function calculateTotalRecordingSize() {
+    let total = 0;
+    if (chunks.current) {
+      Object.values(chunks.current).forEach(arr => {
+        if (Array.isArray(arr)) {
+          total += arr.reduce((acc, chunk) => acc + (chunk.size || 0), 0);
+        }
+      });
+    }
+    return total;
+  }
+
   return (
     <div className="App">
       <div className="App-header">
@@ -468,18 +581,6 @@ function App() {
               Options:
             </div>
             */}
-            <div
-              className="settings-label options-placeholder"
-              style={{
-                minWidth: "110px",
-                width: "110px",
-                textAlign: "left",
-                display: "flex",
-                alignItems: "baseline"
-              }}
-            >
-              Options:
-            </div>
             <div className="settings-control" style={{ flex: 1 }}>
               {/* Centered options checkboxes */}
               <div className="display-center">
@@ -676,9 +777,24 @@ function App() {
         )}
 
         {recording && (
-          <div className="recording-timer">
-            ⏺ Recording: {formatTime(recordingTime)}
-          </div>
+          <>
+            <div className="recording-timer">
+              ⏺ Recording: {formatTime(recordingTime)}
+            </div>
+            <div className={`recording-size${
+              recordingSize > 1024 * 1024 * 1024 ? ' danger' : 
+              recordingSize > 500 * 1024 * 1024 ? ' warning' : ''
+            }`}>
+              {formatSize(calculateTotalRecordingSize() || calculateEstimatedSize(recordingTime, {
+                hasVideo: recordOptions.screenIds.length > 0 || recordOptions.cameraIds.length > 0,
+                videoResolution,
+                hasAudio: recordOptions.mic && recordOptions.micIds.length > 0,
+                audioQuality
+              }))}
+              {recordingSize > 1024 * 1024 * 1024 && " ⚠️ Recording may become unstable"}
+              {recordingSize > 500 * 1024 * 1024 && recordingSize <= 1024 * 1024 * 1024 && " ⚠️ Large file size"}
+            </div>
+          </>
         )}
 
         <div className="preview-controls" style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
@@ -690,13 +806,17 @@ function App() {
                 controls
                 className="video-preview"
               />
-              <button
-                className="neon-save"
-                onClick={() => saveFile('screen', false)}
-                style={{marginTop: '8px'}}
-              >
-                Save Screen Recording
-              </button>
+              <div className="save-button-container">
+                <button
+                  className="neon-save"
+                  onClick={() => saveFile('screen', false)}
+                >
+                  Save Screen Recording
+                </button>
+                <span className="file-size">
+                  {formatSize(chunks.current['screen']?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
+                </span>
+              </div>
             </div>
           )}
           {recordOptions.cameraIds && recordOptions.cameraIds.map(camId =>
@@ -719,6 +839,9 @@ function App() {
                 >
                   Save Camera Recording
                 </button>
+                <span className="file-size">
+                  {formatSize(chunks.current['camera_' + camId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
+                </span>
               </div>
             ) : null
           )}
@@ -734,13 +857,17 @@ function App() {
                   src={audioUrls['mic_' + micId] || undefined}
                   controls
                 />
-                <button
-                  className="neon-save"
-                  onClick={() => saveFile('mic_' + micId, true)}
-                  style={{marginTop: '8px'}}
-                >
-                  Save Microphone Audio
-                </button>
+                <div className="save-button-container">
+                  <button
+                    className="neon-save"
+                    onClick={() => saveFile('mic_' + micId, true)}
+                  >
+                    Save Microphone Audio
+                  </button>
+                  <span className="file-size">
+                    {formatSize(chunks.current['mic_' + micId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
+                  </span>
+                </div>
               </div>
             ) : null
           )}

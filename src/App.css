@@ -607,7 +607,7 @@ button:disabled {
   gap: 10px;
   width: 100%;
   padding: 0;
-  margin: 0 0 32px 0;
+  margin: 32px 0 32px 0; /* Added top margin to create space after title */
 }
 
 /* Style for the main option boxes */
@@ -651,4 +651,48 @@ button:disabled {
 select {
   width: 260px !important; /* Match options-checkbox width */
   max-width: 260px;
+}
+
+/* Remove this if it exists */
+.options-placeholder {
+  color: transparent !important;
+  user-select: none;
+  pointer-events: none;
+}
+.recording-timer {
+  color: #ffb3fe;
+  font-size: 1.18rem;
+  font-weight: 600;
+  text-align: center;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  letter-spacing: 0.01em;
+  text-shadow: 0 0 6px #beadff77;
+}
+.recording-size {
+  color: #3ae3de;
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 8px;
+  letter-spacing: 0.01em;
+}
+
+.recording-size.warning {
+  color: #ffb3fe;
+  text-shadow: 0 0 4px #beadff55;
+}
+
+.recording-size.danger {
+  color: #ff6161;
+  text-shadow: 0 0 4px #ff616155;
+}
+
+.file-size {
+  color: #3ae3de;
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 8px;
+  letter-spacing: 0.01em;
 }
