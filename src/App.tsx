@@ -16,7 +16,7 @@ function App() {
   // Helper to load ffmpeg.wasm if not already loaded
   const loadFFmpeg = async () => {
     if (!ffmpeg.current) {
-      const ffmpegModule = await import('@ffmpeg/ffmpeg');
+      const ffmpegModule = await import(/* @vite-ignore */ '@ffmpeg/ffmpeg');
       const createFFmpeg = ffmpegModule.createFFmpeg || ffmpegModule.default?.createFFmpeg;
       if (!createFFmpeg) {
         throw new Error('createFFmpeg is not available from @ffmpeg/ffmpeg import');
