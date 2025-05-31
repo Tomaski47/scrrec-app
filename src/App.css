@@ -11,24 +11,143 @@
 }
 
 /* Quality settings dropdowns (resolution + audio quality) */
-.quality-settings {
+/* Quality settings dropdowns (resolution + audio quality) */
+.quality-settings,
+.recording-options {
   display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: center;
-  margin: 18px 0 28px 0;
+  flex-direction: column;
+  gap: 22px;
+  align-items: center;
+}
+
+.quality-settings label {
+  text-align: left;
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: #fff4ff;
 }
 
 .quality-settings select {
-  background: linear-gradient(90deg, #a1e3ff 0%, #beadff 100%);
-  color: #18181b;
-  border: none;
-  border-radius: 10px;
-  padding: 10px 14px;
-  font-size: 1.05rem;
-  font-weight: 600;
-  box-shadow: 0 1.5px 7px 0 rgba(190, 173, 255, 0.07);
+  width: 260px;
+  max-width: 260px;
+  min-width: 260px;
+  margin-bottom: 12px;
+  align-self: flex-start;
 }
+
+/* Recording options checkboxes */
+/* Recording options: two-column grid layout for aligned labels and controls */
+.recording-options {
+  background: #0f0f14;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid #3ae3de;
+  margin-bottom: 28px;
+  box-sizing: border-box;
+  margin-top: 24px;
+}
+
+.recording-options > label {
+  grid-column: 1;
+  font-weight: 600;
+  font-size: 1rem;
+  color: #ffffff;
+  text-align: right;
+  padding-top: 6px;
+}
+
+.recording-options .checkbox-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Center checkboxes horizontally */
+  gap: 10px;
+  padding-left: 0;
+  margin-left: 0;
+}
+
+.recording-options .checkbox-group > label {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: #ffffff;
+  background: #15151b;
+  border: 1px solid #30ffd7;
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  width: fit-content;
+  margin-bottom: 4px;
+  margin-left: 12px;
+}
+
+.recording-options .submenu-checkbox {
+  margin-left: 28px;
+  padding-left: 18px;
+  border-left: 1px dashed #444;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.recording-options .submenu-checkbox label {
+  display: block;
+  font-size: 0.9rem;
+  color: #30ffd7;
+  font-weight: 500;
+  margin-left: 20px;
+  white-space: nowrap;
+  text-indent: 12px;
+}
+
+.recording-options label:hover,
+.recording-options .checkbox-group > label:hover {
+  background: #272730;
+}
+
+.recording-options input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #30ffd7;
+  border-radius: 5px;
+  background-color: transparent;
+  position: relative;
+  box-shadow: 0 0 4px #30ffd777;
+}
+
+.recording-options input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  width: 3px;
+  height: 7px;
+  border: solid #beadff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Container for multiple video previews */
+.video-preview-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+/* Group of save buttons for separate feeds */
+.save-buttons-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
 body {
   background: #18181b;
   color: #f4f4f5;
@@ -68,6 +187,7 @@ h1 {
   margin: 0 0 12px 0;
   color: #beadff;
   text-shadow: 0 2px 8px #3ae3de33;
+  text-align: center;
 }
 
 p {
@@ -81,8 +201,8 @@ p {
 label {
   color: #fff4ff;
   margin: 0 16px 0 0;
-  font-weight: 600;
-  font-size: 1.06rem;
+  font-weight: 500;
+  font-size: 1.02rem;
   letter-spacing: 0.01em;
 }
 
@@ -113,6 +233,7 @@ select {
   margin-left: 7px;
   margin-right: 16px;
   box-shadow: 0 1.5px 7px 0 rgba(190, 173, 255, 0.07);
+  width: 260px !important;
 }
 
 button {
@@ -167,18 +288,39 @@ button:disabled {
   gap: 28px;
   margin-bottom: 28px;
   justify-content: center;
+  margin-top: 38px; /* <-- Add or increase this value for more breathing room */
 }
 
-.recording-mode-select {
-  background: linear-gradient(90deg, #beadff 0%, #e2f3fa 100%);
-  color: #18181b;
-  border: none;
-  border-radius: 10px;
-  padding: 12px 20px;
-  font-size: 1.05rem;
-  font-weight: 600;
-  margin: 12px 0 24px 0;
-  box-shadow: 0 1.5px 7px 0 rgba(190, 173, 255, 0.07);
+.app-footer {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 0.98rem;
+  color: #fff;
+  opacity: 0.82;
+  letter-spacing: 0.01em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.app-footer .copyright {
+  font-size: 0.97rem;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.app-footer .footer-link {
+  color: #fff;
+  font-size: 0.97rem;
+  text-decoration: underline;
+  opacity: 0.85;
+  transition: color 0.18s;
+}
+
+.app-footer .footer-link:hover {
+  color: #beadff;
+  opacity: 1;
 }
 
 @media (max-width: 700px) {
@@ -224,21 +366,20 @@ button:disabled {
   }
 }
 
-/* Center the main title */
-h1 {
-  text-align: center;
-}
-
 /* Special neon styles for Stop and Save buttons */
 .neon-stop {
   background: linear-gradient(90deg, #ff61f4 0%, #ff2c6d 100%) !important;
   box-shadow: 0 0 12px #ff61f4aa, 0 0 36px #ff2c6daa;
-  color: #fff;
+  color: #ffffff;
+  font-weight: 800;
+  text-shadow: 0 1px 2px #000;
   border: none;
 }
 .neon-stop:hover {
   background: linear-gradient(90deg, #ff2c6d 0%, #ff61f4 100%) !important;
   box-shadow: 0 0 32px #ff61f4dd, 0 0 40px #ff2c6ddd;
+  color: #ffffff;
+  text-shadow: 0 1px 2px #000;
 }
 
 .neon-save {
@@ -252,4 +393,262 @@ h1 {
 .neon-save:hover {
   background: linear-gradient(90deg, #36d1c4 0%, #30ffd7 100%) !important;
   box-shadow: 0 0 36px #30ffd7cc, 0 0 40px #36d1c4cc;
+}
+.stream-label {
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: #bdbdef;
+  margin-top: -10px;
+  text-transform: capitalize;
+}
+/* Margin and style for options header above recording options */
+.options-header {
+  margin-bottom: 10px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #beadff;
+  text-align: left;
+  width: 100%;
+  padding-top: 4px;
+}
+
+/* Visual unity wrapper for settings */
+.settings-section {
+  border: 1px solid #2e2e3a;
+  background: #1a1a22;
+  padding: 22px;
+  border-radius: 20px;
+  margin-bottom: 32px;
+  box-shadow: 0 0 18px #3ae3de11;
+  gap: 32px;
+  align-self: center;
+}
+
+
+.hidden {
+  display: none !important;
+}
+/* Settings two-column row layout */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 14px;
+  gap: 8px;
+  width: 320px; /* or 340px, match your dropdown width + label */
+  max-width: 100%;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Left label styling - more vertical alignment */
+.settings-label {
+  min-width: 90px;
+  text-align: right;
+  margin-right: 10px;
+  font-weight: 600;
+  font-size: 1.08rem;
+  color: #fff4ff;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  letter-spacing: 0.01em;
+  padding-top: 0;
+}
+
+/* Settings control column - more spacing */
+.settings-control {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* Checkbox group - more vertical space */
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Center checkboxes horizontally */
+  gap: 10px;
+  padding-left: 0;
+  margin-left: 0;
+}
+
+/* Option block - more space between options */
+.option-block {
+  margin-bottom: 6px; /* Tighter spacing between main checkboxes */
+}
+.option-block.has-submenu {
+  margin-bottom: 8px; /* Slightly more if submenu is open, or keep at 6px for perfect uniformity */
+}
+
+/* Submenu: neon gradient border and glow */
+.nested-checkbox-group-column {
+  margin-top: 6px;
+  padding-left: 0;
+  border-left: none;
+}
+
+.submenu-checkbox {
+  display: flex;
+  align-items: center;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(90deg, #3ae3de 0%, #beadff 100%);
+  border-radius: 10px;
+  padding: 6px 18px;
+  margin-bottom: 8px;
+  margin-left: 0;
+  position: relative;
+  box-shadow: 0 0 12px #beadff66, 0 0 24px #3ae3de44;
+  border: 2px solid transparent;
+  background-clip: padding-box, border-box;
+  background-origin: padding-box, border-box;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.submenu-checkbox input[type="checkbox"] {
+  margin-right: 12px;
+  accent-color: #beadff;
+  width: 18px;
+  height: 18px;
+}
+
+.submenu-checkbox:hover {
+  box-shadow: 0 0 24px #beadffcc, 0 0 48px #3ae3de99;
+  border-color: #3ae3de;
+  background: linear-gradient(90deg, #beadff 0%, #3ae3de 100%);
+  color: #18181b;
+}
+
+/* Main options checkboxes: darker neon box */
+.options-checkbox {
+  display: flex;
+  align-items: center;
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(90deg, #1a2a2e 0%, #2a1a3a 100%);
+  border-radius: 12px;
+  padding: 8px 24px;
+  margin-bottom: 8px; /* less space by default */
+  margin-left: 0;
+  box-shadow: 0 0 12px #3ae3de33, 0 0 24px #beadff22;
+  border: 2px solid #3ae3de;
+  transition: box-shadow 0.2s, border-color 0.2s, background 0.2s;
+  width: fit-content;
+  min-width: 220px;
+}
+
+.options-checkbox input[type="checkbox"] {
+  margin-right: 14px;
+  accent-color: #beadff;
+  width: 20px;
+  height: 20px;
+}
+
+.options-checkbox:hover {
+  box-shadow: 0 0 32px #beadffcc, 0 0 56px #3ae3de99;
+  border-color: #beadff;
+  background: linear-gradient(90deg, #232346 0%, #1a2a2e 100%);
+  color: #fff;
+}
+
+/* Reduce space between option-blocks, but add space if submenu is open */
+.option-block {
+  margin-bottom: 8px;
+}
+.option-block.has-submenu {
+  margin-bottom: 8px; /* Match the default for even spacing */
+}
+
+/* Submenu device list: smaller, more compact */
+.device-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  margin-left: 38px; /* Increase this value to match the indent of the parent label text */
+}
+
+.device-submenu label {
+  display: flex;
+  align-items: center;
+  font-size: 0.86rem;      /* smaller */
+  font-weight: 400;        /* less bold */
+  color: #ffb3fe;
+  background: none;
+  margin-left: 0;
+  padding: 1px 0 1px 0;
+  text-shadow: 0 0 4px #beadff55;
+  letter-spacing: 0.01em;
+  white-space: normal; /* Allow wrapping if label is long */
+}
+
+/* Center the options and dropdowns container */
+.settings-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* Center the checkbox group (Screen, Mic, Camera options) */
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  margin: 0 0 32px 0;
+}
+
+/* Style for the main option boxes */
+.options-checkbox {
+  display: flex;
+  align-items: center;
+  width: 260px; /* Match dropdown width */
+  margin: 0 auto;
+  justify-content: flex-start;
+}
+
+/* Settings row for dropdowns */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto 14px auto;
+  padding: 4px 0;
+}
+
+/* Label styling for dropdowns */
+.settings-label {
+  width: 100px;
+  min-width: 100px;
+  text-align: right;
+  margin-right: 12px;
+  font-weight: 600;
+  font-size: 1.08rem;
+  color: #fff4ff;
+}
+
+/* Control/dropdown container */
+.settings-control {
+  flex: 1;
+  max-width: 260px; /* Match options-checkbox width */
+}
+
+/* Dropdown select element */
+select {
+  width: 260px !important; /* Match options-checkbox width */
+  max-width: 260px;
 }

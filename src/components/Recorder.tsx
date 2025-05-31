@@ -3,20 +3,33 @@ import { CameraIcon } from '@lucide/react';
 import { FaMicrophone } from 'react-icons/fa';
 
 const Recorder = () => {
-  const [recordingMode, setRecordingMode] = useState('screen+audio');
+  const [recordScreen, setRecordScreen] = useState(false);
+  const [recordCamera, setRecordCamera] = useState(false);
+  const [recordMic, setRecordMic] = useState(false);
+  const [recordInternalAudio, setRecordInternalAudio] = useState(false);
   const [resolution, setResolution] = useState('fullhd');
   const [audioQuality, setAudioQuality] = useState('best');
   // ...
   return (
     <div className="flex flex-col items-center justify-center">
       <div className="mb-4 space-y-2">
-        <div>
-          <label className="text-white mr-2">Mode:</label>
-          <select value={recordingMode} onChange={(e) => setRecordingMode(e.target.value)} className="p-1 rounded">
-            <option value="audio">Audio Only</option>
-            <option value="screen">Screen Only</option>
-            <option value="screen+audio">Screen + Audio</option>
-          </select>
+        <div className="text-white space-y-1">
+          <label className="block">
+            <input type="checkbox" checked={recordScreen} onChange={(e) => setRecordScreen(e.target.checked)} />
+            <span className="ml-2">Screen</span>
+          </label>
+          <label className="block">
+            <input type="checkbox" checked={recordCamera} onChange={(e) => setRecordCamera(e.target.checked)} />
+            <span className="ml-2">Camera</span>
+          </label>
+          <label className="block">
+            <input type="checkbox" checked={recordMic} onChange={(e) => setRecordMic(e.target.checked)} />
+            <span className="ml-2">Microphone</span>
+          </label>
+          <label className="block">
+            <input type="checkbox" checked={recordInternalAudio} onChange={(e) => setRecordInternalAudio(e.target.checked)} />
+            <span className="ml-2">Internal Audio</span>
+          </label>
         </div>
         <div>
           <label className="text-white mr-2">Resolution:</label>
@@ -44,8 +57,8 @@ const Recorder = () => {
         {isRecording ? 'Stop Recording' : 'Start Recording'}
       </button>
       <div className="flex flex-col items-center justify-center">
-        <FaMicrophone size={24} />
-        {recordingMode === 'audio' ? <FaMicrophone size={24} /> : <CameraIcon size={24} />}
+        {recordMic ? <FaMicrophone size={24} /> : null}
+        {recordCamera ? <CameraIcon size={24} /> : null}
       </div>
     </div>
   );

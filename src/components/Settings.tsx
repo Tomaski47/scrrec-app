@@ -3,7 +3,12 @@ import { useMediaQuery } from 'react-hook-mediaquery';
 
 const Settings = () => {
   const [selectedFolder, setSelectedFolder] = useState('');
-  const [recordingMode, setRecordingMode] = useState('screen-audio');
+  const [recordingOptions, setRecordingOptions] = useState({
+    screen: false,
+    camera: false,
+    mic: false,
+    internalAudio: false,
+  });
   const [resolution, setResolution] = useState('full');
   const [audioQuality, setAudioQuality] = useState('best');
 
@@ -18,18 +23,69 @@ const Settings = () => {
         />
       </label>
 
-      <label className="mt-4">
-        Recording Mode:
-        <select
-          value={recordingMode}
-          onChange={(e) => setRecordingMode(e.target.value)}
-          className="ml-2 border border-gray-300 rounded px-2 py-1"
-        >
-          <option value="screen">Screen Only</option>
-          <option value="screen-audio">Screen + Audio</option>
-          <option value="audio">Audio Only</option>
-        </select>
-      </label>
+      <div className="mt-4">
+        <span>Recording Options:</span>
+        <div>
+          <label>
+            <input
+              type="checkbox"
+              checked={recordingOptions.screen}
+              onChange={() =>
+                setRecordingOptions((prev) => ({
+                  ...prev,
+                  screen: !prev.screen,
+                }))
+              }
+            />
+            Screen Recording
+          </label>
+        </div>
+        <div>
+          <label>
+            <input
+              type="checkbox"
+              checked={recordingOptions.camera}
+              onChange={() =>
+                setRecordingOptions((prev) => ({
+                  ...prev,
+                  camera: !prev.camera,
+                }))
+              }
+            />
+            Video Camera (front/rear/both)
+          </label>
+        </div>
+        <div>
+          <label>
+            <input
+              type="checkbox"
+              checked={recordingOptions.mic}
+              onChange={() =>
+                setRecordingOptions((prev) => ({
+                  ...prev,
+                  mic: !prev.mic,
+                }))
+              }
+            />
+            Mic Audio
+          </label>
+        </div>
+        <div>
+          <label>
+            <input
+              type="checkbox"
+              checked={recordingOptions.internalAudio}
+              onChange={() =>
+                setRecordingOptions((prev) => ({
+                  ...prev,
+                  internalAudio: !prev.internalAudio,
+                }))
+              }
+            />
+            Internal Audio
+          </label>
+        </div>
+      </div>
 
       <label className="mt-4">
         Resolution:
@@ -60,8 +116,15 @@ const Settings = () => {
       </label>
 
       <button
-        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        onClick={() => console.log('Selected Folder:', selectedFolder)}
+        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4"
+        onClick={() =>
+          console.log('Settings:', {
+            selectedFolder,
+            recordingOptions,
+            resolution,
+            audioQuality,
+          })
+        }
       >
         Save Settings
       </button>
