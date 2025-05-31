@@ -1,0 +1,25 @@
+# Ignore node modules
+node_modules
+
+# Ignore logs
+*.log
+
+# Ignore build artifacts
+dist
+.vite
+
+# Ignore system files
+.DS_Store
+
+# Ignore Git
+.git
+.gitignore
+
+
+# Ignore test files (if any)
+*.test.*
+__tests__/
+
+# Ignore environment files
+.env
+.env.local

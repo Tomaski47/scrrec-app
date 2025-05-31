@@ -10,11 +10,6 @@ export default defineConfig({
     port: 5175, // Explicitly set the port to 5175
   },
   optimizeDeps: {
-    exclude: ['lucide-react'],
-  },
-  build: {
-    rollupOptions: {
-      external: ['@ffmpeg/ffmpeg'],
-    },
+    exclude: ['lucide-react', '@ffmpeg/ffmpeg'],
   },
 });

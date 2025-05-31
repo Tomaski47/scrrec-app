@@ -1,5 +1,5 @@
 import './App.css';
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 
 
 function App() {
@@ -9,8 +9,8 @@ function App() {
   // Video/audio quality options
   const bitsPerSecond = {
     low: 2_000_000,
-    medium: 4_000_000,
-    high: 8_000_000,
+    mid: 4_000_000,
+    best: 8_000_000,
   };
 
   // Helper to load ffmpeg.wasm if not already loaded
@@ -26,10 +26,11 @@ function App() {
     }
   };
 
-  // Add state for quality and format
-  const [videoQuality, setVideoQuality] = useState('medium');
-  const [audioQuality, setAudioQuality] = useState('medium');
+  // Add state for quality, format, and resolution
+  const [videoQuality, setVideoQuality] = useState('mid');
+  const [audioQuality, setAudioQuality] = useState('mid');
   const [fileFormat, setFileFormat] = useState('webm');
+  const [videoResolution, setVideoResolution] = useState<'fullscreen' | '1080p' | '720p' | '480p' | '360p'>('fullscreen');
 
   const [recording, setRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
@@ -38,56 +39,117 @@ function App() {
   const [downloadType, setDownloadType] = useState<'video' | 'audio'>('video');
   const chunks = useRef<Blob[]>([]);
 
+  // Detect if getDisplayMedia is supported
+  const [supportsDisplayMedia, setSupportsDisplayMedia] = useState(true);
+  useEffect(() => {
+    setSupportsDisplayMedia(typeof (navigator.mediaDevices as any).getDisplayMedia === 'function');
+  }, []);
+
+  // Add recording mode state
+  const [recordingMode, setRecordingMode] = useState<'screen-only' | 'screen-audio' | 'audio-only'>('screen-audio');
+
   const startRecording = async () => {
     try {
-      // Ask for screen/tab + system/tab audio (tab audio only if "Share Tab Audio" is selected)
-      const screenStream = await (navigator.mediaDevices as any).getDisplayMedia({
-        video: true,
-        audio: true,
-      });
+      let combinedStream: MediaStream | null = null;
 
-      // Optionally also get mic audio
-      let micStream: MediaStream | null = null;
-      try {
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      } catch {
-        // Mic access denied or unavailable
+      // Helper to get resolution constraints
+      const getResolutionConstraints = () => {
+        switch (videoResolution) {
+          case '1080p':
+            return { width: 1920, height: 1080 };
+          case '720p':
+            return { width: 1280, height: 720 };
+          case '480p':
+            return { width: 854, height: 480 };
+          case '360p':
+            return { width: 640, height: 360 };
+          case 'fullscreen':
+          default:
+            return {};
+        }
+      };
+
+      // If getDisplayMedia is not supported, fallback to audio-only mode
+      if (!supportsDisplayMedia || recordingMode === 'audio-only') {
+        // Audio only (or mobile fallback)
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        combinedStream = audioStream;
+      } else {
+        if (recordingMode === 'screen-only') {
+          // Screen only, no audio
+          const screenStream = await (navigator.mediaDevices as any).getDisplayMedia({
+            video: getResolutionConstraints(),
+            audio: false,
+          });
+          combinedStream = screenStream;
+        } else if (recordingMode === 'screen-audio') {
+          // Screen + audio (system + mic)
+          const screenStream = await (navigator.mediaDevices as any).getDisplayMedia({
+            video: getResolutionConstraints(),
+            audio: true,
+          });
+
+          let micStream: MediaStream | null = null;
+          try {
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch {
+            // Mic access denied or unavailable
+          }
+
+          // Merge tracks for video+audio
+          const tracks = [...screenStream.getVideoTracks()];
+          if (screenStream.getAudioTracks().length) tracks.push(...screenStream.getAudioTracks());
+          if (micStream && micStream.getAudioTracks().length) tracks.push(...micStream.getAudioTracks());
+          combinedStream = new MediaStream(tracks);
+        }
       }
 
-      // Merge tracks for video+audio
-      const tracks = [...screenStream.getVideoTracks()];
-      if (screenStream.getAudioTracks().length) tracks.push(...screenStream.getAudioTracks());
-      if (micStream && micStream.getAudioTracks().length) tracks.push(...micStream.getAudioTracks());
-      const combinedStream = new MediaStream(tracks);
+      if (!combinedStream) {
+        alert('Could not get media stream for recording.');
+        return;
+      }
 
-      const recorder = new MediaRecorder(combinedStream, {
-        mimeType: 'video/webm', // keep as webm for now
-        videoBitsPerSecond: bitsPerSecond[videoQuality],
-        audioBitsPerSecond: bitsPerSecond[audioQuality] / 4,
-      });
+      const recorderOptions: MediaRecorderOptions = {};
+      if (recordingMode === 'audio-only') {
+        recorderOptions.mimeType = 'audio/webm';
+        recorderOptions.audioBitsPerSecond = bitsPerSecond[audioQuality];
+      } else {
+        recorderOptions.mimeType = 'video/webm';
+        recorderOptions.videoBitsPerSecond = bitsPerSecond[videoQuality];
+        recorderOptions.audioBitsPerSecond = bitsPerSecond[audioQuality] / 4;
+      }
+
+      const recorder = new MediaRecorder(combinedStream, recorderOptions);
       chunks.current = [];
       recorder.ondataavailable = (e) => e.data.size > 0 && chunks.current.push(e.data);
       recorder.onstop = () => {
-        // Create video blob
-        const videoBlob = new Blob(chunks.current, { type: 'video/webm' });
-        setVideoUrl(URL.createObjectURL(videoBlob));
-        // Optionally: Extract audio
-        if ('MediaRecorder' in window) {
-          try {
-            const audioTracks = combinedStream.getAudioTracks();
-            if (audioTracks.length) {
-              const audioStream = new MediaStream(audioTracks);
-              const audioRecorder = new MediaRecorder(audioStream);
-              const audioChunks: Blob[] = [];
-              audioRecorder.ondataavailable = (ev) => ev.data.size > 0 && audioChunks.push(ev.data);
-              audioRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                setAudioUrl(URL.createObjectURL(audioBlob));
-              };
-              audioRecorder.start();
-              setTimeout(() => audioRecorder.stop(), 500); // Record short audio segment for download
-            }
-          } catch {}
+        if (recordingMode === 'audio-only') {
+          // Create audio blob only
+          const audioBlob = new Blob(chunks.current, { type: 'audio/webm' });
+          setAudioUrl(URL.createObjectURL(audioBlob));
+          setVideoUrl(null);
+        } else {
+          // Create video blob
+          const videoBlob = new Blob(chunks.current, { type: 'video/webm' });
+          setVideoUrl(URL.createObjectURL(videoBlob));
+          // Optionally: Extract audio
+          if ('MediaRecorder' in window) {
+            try {
+              const audioTracks = combinedStream.getAudioTracks();
+              if (audioTracks.length) {
+                const audioStream = new MediaStream(audioTracks);
+                const audioRecorder = new MediaRecorder(audioStream);
+                const audioChunks: Blob[] = [];
+                audioRecorder.ondataavailable = (ev) => ev.data.size > 0 && audioChunks.push(ev.data);
+                audioRecorder.onstop = () => {
+                  const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                  setAudioUrl(URL.createObjectURL(audioBlob));
+                };
+                audioRecorder.start();
+                setTimeout(() => audioRecorder.stop(), 500); // Record short audio segment for download
+              }
+            } catch {}
+          }
         }
       };
 
@@ -107,6 +169,12 @@ function App() {
 
   // "Save As" handler using File System Access API or fallback
   const saveFile = async () => {
+    // Only allow audio save if recording mode is audio-only
+    if (downloadType === 'audio' && recordingMode !== 'audio-only') {
+      alert('Audio only save is only available in Audio Only recording mode.');
+      return;
+    }
+
     const url = downloadType === 'video' ? videoUrl : audioUrl;
     if (!url) return;
 
@@ -216,15 +284,28 @@ function App() {
 
         <div className="controls-row">
           <label className="control-label">
+            Recording Mode:
+            <select
+              className="control-select"
+              value={recordingMode}
+              onChange={e => setRecordingMode(e.target.value as any)}
+            >
+              <option value="screen-only" disabled={!supportsDisplayMedia}>Screen Only (No Audio)</option>
+              <option value="screen-audio" disabled={!supportsDisplayMedia}>Screen + Audio</option>
+              <option value="audio-only">Audio Only</option>
+            </select>
+          </label>
+          <label className="control-label">
             Video Quality:
             <select
               className="control-select"
               value={videoQuality}
               onChange={e => setVideoQuality(e.target.value)}
+              disabled={recordingMode === 'audio-only'}
             >
               <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+              <option value="mid">Mid</option>
+              <option value="best">Best</option>
             </select>
           </label>
           <label className="control-label">
@@ -235,8 +316,23 @@ function App() {
               onChange={e => setAudioQuality(e.target.value)}
             >
               <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+              <option value="mid">Mid</option>
+              <option value="best">Best</option>
+            </select>
+          </label>
+          <label className="control-label">
+            Video Resolution:
+            <select
+              className="control-select"
+              value={videoResolution}
+              onChange={e => setVideoResolution(e.target.value as any)}
+              disabled={recordingMode === 'audio-only'}
+            >
+              <option value="fullscreen">Fullscreen</option>
+              <option value="1080p">1080p</option>
+              <option value="720p">720p</option>
+              <option value="480p">480p</option>
+              <option value="360p">360p</option>
             </select>
           </label>
           <label className="control-label">
@@ -286,11 +382,13 @@ function App() {
 
         {videoUrl && (
           <div className="preview-controls" style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-            <video
-              src={videoUrl}
-              controls
-              className="video-preview"
-            />
+            {recordingMode !== 'audio-only' && (
+              <video
+                src={videoUrl}
+                controls
+                className="video-preview"
+              />
+            )}
             <div className="controls-row" style={{margin: '14px 0'}}>
               <button
                 className={`btn ${downloadType === 'video' ? 'btn-active' : 'btn-inactive'}`}
@@ -298,13 +396,15 @@ function App() {
               >
                 Video+Audio
               </button>
-              <button
-                className={`btn ${downloadType === 'audio' ? 'btn-active' : 'btn-inactive'}`}
-                onClick={() => setDownloadType('audio')}
-                disabled={!audioUrl}
-              >
-                Audio Only
-              </button>
+              {recordingMode === 'audio-only' && (
+                <button
+                  className={`btn ${downloadType === 'audio' ? 'btn-active' : 'btn-inactive'}`}
+                  onClick={() => setDownloadType('audio')}
+                  disabled={!audioUrl}
+                >
+                  Audio Only
+                </button>
+              )}
             </div>
             <button
               className="neon-save"

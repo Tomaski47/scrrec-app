@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
+    "start": "npm run dev",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
+    "file-saver": "^2.0.5",
+    "@ffmpeg/util": "^0.12.15",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
