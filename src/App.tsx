@@ -1,10 +1,54 @@
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
-import React, { useRef, useState, useEffect } from 'react';
+
+// All hooks and related functions must be inside the App component!
 
 
 function App() {
+  // Mobile device detection
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  // Permission status state
+  const [permissionStatus, setPermissionStatus] = useState<Record<string, string>>({});
+
+  // Helper function to check permission status for camera and microphone
+  const checkPermissions = async () => {
+    const types = ['camera', 'microphone'];
+    const statuses: Record<string, string> = {};
+    for (const type of types) {
+      try {
+        const status = await navigator.permissions.query({ name: type as PermissionName });
+        statuses[type] = status.state;
+      } catch {
+        statuses[type] = 'unknown';
+      }
+    }
+    setPermissionStatus(statuses);
+  };
+  // Check permission status on mount
+  useEffect(() => {
+    checkPermissions();
+    // eslint-disable-next-line
+  }, []);
+
+  // Manual permission retry function
+  const retryPermissions = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+      stream.getTracks().forEach(track => track.stop()); // Stop immediately
+      alert("Permissions granted. Please start recording again.");
+      await checkPermissions();
+    } catch (err: any) {
+      alert("Still couldn't access camera or mic. Try restarting the browser or exiting incognito/guest mode.\n\nError: " + (err?.message || err));
+      await checkPermissions();
+    }
+  };
   const ffmpeg = useRef<any>(null);
   const dirHandleRef = useRef<any>(null);
+  // Track all active media streams for cleanup
+  const activeStreamsRef = useRef<MediaStream[]>([]);
 
   const [isConverting, setIsConverting] = useState(false);
 
@@ -32,6 +76,9 @@ function App() {
   const [audioQuality, setAudioQuality] = useState('best');
   const [fileFormat, setFileFormat] = useState('webm');
   const [videoResolution, setVideoResolution] = useState<'fullscreen' | '1080p' | '720p' | '480p' | '360p'>('fullscreen');
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  // Ensure selectedOption state is declared in the component body
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
   const [recording, setRecording] = useState(false);
   const [mediaRecorders, setMediaRecorders] = useState<{[key:string]: MediaRecorder | null}>({});
@@ -56,6 +103,10 @@ function App() {
   // Camera/mic device detection state
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
+  // Placeholder for future multi-screen support
+  const [screenDevices] = useState<{ deviceId: string; label?: string }[]>([
+    { deviceId: "main", label: "Main Screen (1920×1080)" }
+  ]);
 
   useEffect(() => {
     navigator.mediaDevices.enumerateDevices().then(devices => {
@@ -86,6 +137,8 @@ function App() {
     try {
       // First clean up any existing recording state
       cleanupRecording();
+      // Always clear activeStreamsRef on new start
+      activeStreamsRef.current = [];
       
       // Helper to get resolution constraints
       const getResolutionConstraints = () => {
@@ -114,9 +167,11 @@ function App() {
           streams.screen = await (navigator.mediaDevices as any).getDisplayMedia({
             video: getResolutionConstraints(),
           });
+          // Track this stream for cleanup
+          activeStreamsRef.current.push(streams.screen);
           streamKeys.push('screen');
         } catch (err: any) {
-          alert('Could not get screen stream.\nError: ' + (err && err.message ? err.message : err));
+          setPermissionError('Could not get screen stream.\nError: ' + (err?.message || err));
           cleanupRecording();
           return;
         }
@@ -131,21 +186,25 @@ function App() {
               audio: false,
             });
             streams['camera_' + camId] = camStream;
+            // Track this stream for cleanup
+            activeStreamsRef.current.push(camStream);
             streamKeys.push('camera_' + camId);
           } catch (err: any) {
             if (err.name === 'OverconstrainedError') {
               try {
                 const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                alert('Selected camera device is not available or does not support required constraints. Falling back to default camera.');
+                setPermissionError('Selected camera device is not available or does not support required constraints. Falling back to default camera.');
                 streams['camera_' + camId] = fallbackStream;
+                // Track fallback stream for cleanup
+                activeStreamsRef.current.push(fallbackStream);
                 streamKeys.push('camera_' + camId);
               } catch (fallbackErr: any) {
-                alert('Could not get any camera stream.\nError: ' + (fallbackErr?.message || fallbackErr));
+                setPermissionError('Could not get any camera stream.\nError: ' + (fallbackErr?.message || fallbackErr));
                 cleanupRecording();
                 return;
               }
             } else {
-              alert('Could not get camera stream for device: ' + camId + '\nError: ' + (err?.message || err));
+              setPermissionError('Could not get camera stream for device: ' + camId + '\nError: ' + (err?.message || err));
               cleanupRecording();
               return;
             }
@@ -167,6 +226,8 @@ function App() {
               video: false,
             });
             micStreams['mic_' + micId] = micStream;
+            // Track this mic stream for cleanup
+            activeStreamsRef.current.push(micStream);
           } catch (err: any) {
             try {
               await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -180,8 +241,10 @@ function App() {
                 video: false,
               });
               micStreams['mic_' + micId] = micStream;
+              // Track this mic stream for cleanup
+              activeStreamsRef.current.push(micStream);
             } catch (finalErr: any) {
-              alert('Could not get microphone audio stream for device: ' + micId + '\nError: ' + (finalErr && finalErr.message ? finalErr.message : finalErr));
+              setPermissionError('Could not get microphone audio stream for device: ' + micId + '\nError: ' + (finalErr?.message || finalErr));
               cleanupRecording();
               return;
             }
@@ -194,7 +257,7 @@ function App() {
         (!recordOptions.cameraIds || recordOptions.cameraIds.length === 0) &&
         (!recordOptions.mic || !recordOptions.micIds || recordOptions.micIds.length === 0)
       ) {
-        alert('No recording options selected.');
+        setPermissionError('No recording options selected.');
         return;
       }
 
@@ -216,6 +279,8 @@ function App() {
             ...audioTracks,
           ]);
           finalStream = combinedStream;
+          // Track this combined stream for cleanup
+          activeStreamsRef.current.push(combinedStream);
         }
         const recorderOptions: MediaRecorderOptions = {
           mimeType: 'video/webm',
@@ -254,6 +319,8 @@ function App() {
             ...audioTracks,
           ]);
           finalStream = combinedStream;
+          // Track this combined stream for cleanup
+          activeStreamsRef.current.push(combinedStream);
         }
         const recorderOptions: MediaRecorderOptions = {
           mimeType: 'video/webm',
@@ -311,7 +378,7 @@ function App() {
     } catch (err) {
       console.error('Recording error:', err);
       cleanupRecording(); // Clean up on error
-      alert('Could not start recording: ' + err);
+      setPermissionError('Could not start recording: ' + err);
     }
   };
 
@@ -356,7 +423,7 @@ function App() {
     } else if (type === 'screen') {
       filename = 'video.' + extension;
     } else if (type === 'camera') {
-      const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
       // Default to rear if we can't detect
       filename = (isMobile ? 'cam-rear' : 'cam') + '.' + extension;
     }
@@ -538,24 +605,18 @@ function App() {
       }
     });
 
-    // Now stop all tracks of each recorder's associated stream
-    Object.keys(mediaRecorders).forEach(key => {
-      const recorder = mediaRecorders[key];
-      // In our setup, we didn’t store the stream directly on the recorder,
-      // so you might want to also keep a ref (or add it to mediaRecorders) when starting.
-      // Here we try to stop any track if available.
-      const stream = (recorder as any)?.stream as MediaStream | undefined;
-      if (stream) {
-        stream.getTracks().forEach(track => {
-          try {
-            track.stop();
-            console.log(`Stopped track ${track.kind} of recorder ${key}`);
-          } catch (error) {
-            console.error(`Error stopping track in recorder ${key}:`, error);
-          }
-        });
-      }
+    // Stop all tracks from all active streams
+    activeStreamsRef.current.forEach((stream, idx) => {
+      stream.getTracks().forEach(track => {
+        try {
+          track.stop();
+          console.log(`Stopped ${track.kind} track from stream #${idx}`);
+        } catch (err) {
+          console.warn('Error stopping track:', err);
+        }
+      });
     });
+    activeStreamsRef.current = [];
 
     // Reset state variables
     setMediaRecorders({});
@@ -577,6 +638,7 @@ function App() {
 
   return (
     <div className="App">
+      {/* Main App Container */}
       <div className="App-header">
         <span className="header-subtitle" style={{ marginBottom: '10px' }}>100% vibe coded</span>
         <h1 className="header-title" style={{ marginTop: 0, marginBottom: '14px' }}>Screen Recorder App</h1>
@@ -635,22 +697,46 @@ function App() {
                     </label>
                     {recordOptions.screenIds.length > 0 && (
                       <div className="device-submenu">
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={recordOptions.screenIds.includes('main')}
-                            onChange={e => {
-                              let screenIds = [...recordOptions.screenIds];
-                              if (e.target.checked && !screenIds.includes('main')) {
-                                screenIds.push('main');
-                              } else if (!e.target.checked) {
-                                screenIds = screenIds.filter(id => id !== 'main');
-                              }
-                              setRecordOptions({ ...recordOptions, screenIds });
-                            }}
-                          />
-                          Main Screen
-                        </label>
+                        {/* Multi-screen dynamic rendering, mobile support */}
+                        {!isMobile ? (
+                          screenDevices.map(device => (
+                            <label key={device.deviceId}>
+                              <input
+                                type="checkbox"
+                                checked={recordOptions.screenIds.includes(device.deviceId)}
+                                onChange={(e) => {
+                                  let screenIds = [...recordOptions.screenIds];
+                                  if (e.target.checked) {
+                                    if (!screenIds.includes(device.deviceId)) screenIds.push(device.deviceId);
+                                  } else {
+                                    screenIds = screenIds.filter((id) => id !== device.deviceId);
+                                  }
+                                  setRecordOptions({ ...recordOptions, screenIds });
+                                }}
+                              />
+                              <span className="device-label">
+                                {device.label || `Screen ${device.deviceId.slice(-4)}`}
+                                {recordOptions.screenIds.includes(device.deviceId) && (
+                                  <span
+                                    className={`device-permission ${
+                                      permissionStatus.screen === 'denied'
+                                        ? 'status-denied'
+                                        : permissionStatus.screen === 'granted'
+                                        ? 'status-granted'
+                                        : 'status-unknown'
+                                    }`}
+                                  >
+                                    : {permissionStatus.screen || 'TBD'}
+                                  </span>
+                                )}
+                              </span>
+                            </label>
+                          ))
+                        ) : (
+                          <p style={{ color: '#bbb', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+                            Screen recording is not supported on mobile devices. Please try on desktop.
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -691,7 +777,22 @@ function App() {
                                 setRecordOptions({ ...recordOptions, micIds });
                               }}
                             />
-                            {device.label || `Mic ${device.deviceId.slice(-4)}`}
+                            <span className="device-label">
+                              {device.label || `Mic ${device.deviceId.slice(-4)}`}
+                              {recordOptions.micIds.includes(device.deviceId) && (
+                                <span
+                                  className={`device-permission ${
+                                    permissionStatus.microphone === 'denied'
+                                      ? 'status-denied'
+                                      : permissionStatus.microphone === 'granted'
+                                      ? 'status-granted'
+                                      : 'status-unknown'
+                                  }`}
+                                >
+                                  : {permissionStatus.microphone || 'TBD'}
+                                </span>
+                              )}
+                            </span>
                           </label>
                         ))}
                       </div>
@@ -734,7 +835,22 @@ function App() {
                                 setRecordOptions({ ...recordOptions, cameraIds });
                               }}
                             />
-                            {device.label || `Camera ${device.deviceId.slice(-4)}`}
+                            <span className="device-label">
+                              {device.label || `Camera ${device.deviceId.slice(-4)}`}
+                              {recordOptions.cameraIds.includes(device.deviceId) && (
+                                <span
+                                  className={`device-permission ${
+                                    permissionStatus.camera === 'denied'
+                                      ? 'status-denied'
+                                      : permissionStatus.camera === 'granted'
+                                      ? 'status-granted'
+                                      : 'status-unknown'
+                                  }`}
+                                >
+                                  : {permissionStatus.camera || 'TBD'}
+                                </span>
+                              )}
+                            </span>
                           </label>
                         ))}
                       </div>
@@ -801,6 +917,22 @@ function App() {
             Stop Recording
           </button>
         </div>
+
+
+        {/* Modal for permission error, after permission status */}
+        {permissionError && (
+          <div className="custom-modal">
+            <div className="modal-content">
+              <p style={{ whiteSpace: "pre-line" }}>{permissionError}</p>
+              <button onClick={retryPermissions} className="btn" style={{ marginRight: "8px" }}>
+                Retry Permissions
+              </button>
+              <button onClick={() => setPermissionError(null)} className="btn neon-stop">
+                Resume
+              </button>
+            </div>
+          </div>
+        )}
 
         {isConverting && (
           <div className="converting-text">Converting... Please wait.</div>
