@@ -1,0 +1,194 @@
+body {
+  background: #18181b;
+  color: #f4f4f5;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+}
+
+.App {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 38px 10px;
+  background: linear-gradient(111deg, #18181b 50%, #1b1a21 100%);
+}
+
+.App-header {
+  background: linear-gradient(111deg, #18181b 70%, #232326 100%);
+  border-radius: 28px;
+  box-shadow: 0 4px 32px 0 rgba(190, 173, 255, 0.09), 0 2.5px 22px 0 rgba(58, 227, 222, 0.07);
+  padding: 40px 28px 28px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 34px;
+  max-width: 540px;
+  width: 100%;
+  border: 2.2px solid #beadff;
+  backdrop-filter: blur(2px);
+}
+
+h1 {
+  font-size: 2.3rem;
+  font-weight: 800;
+  margin: 0 0 12px 0;
+  color: #beadff;
+  text-shadow: 0 2px 8px #3ae3de33;
+}
+
+p {
+  color: #a6a7e0;
+  margin-bottom: 30px;
+  font-size: 1.16rem;
+  font-weight: 500;
+  text-shadow: 0 1.5px 4px #1b1a2133;
+}
+
+label {
+  color: #fff4ff;
+  margin: 0 16px 0 0;
+  font-weight: 600;
+  font-size: 1.06rem;
+  letter-spacing: 0.01em;
+}
+
+select, input[type="file"] {
+  background: #232326;
+  color: #f4f4f5;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 1rem;
+  margin-left: 4px;
+  margin-right: 14px;
+}
+
+button, select, input[type="file"] {
+  font-size: 1.10rem;
+  padding: 14px 28px;
+  min-width: 120px;
+  border-radius: 12px;
+  font-family: inherit;
+}
+
+select {
+  min-width: 90px;
+  background: linear-gradient(90deg, #beadff 0%, #e2f3fa 100%);
+  color: #18181b;
+  border: none;
+  margin-left: 7px;
+  margin-right: 16px;
+  box-shadow: 0 1.5px 7px 0 rgba(190, 173, 255, 0.07);
+}
+
+button {
+  background: linear-gradient(90deg, #3ae3de 0%, #ff61f4 100%);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 1.10rem;
+  font-weight: 700;
+  box-shadow: 0 6px 24px 0 rgba(30,41,59,.08);
+  margin: 0 12px;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.13s;
+  cursor: pointer;
+}
+
+button:hover {
+  background: linear-gradient(90deg, #ff61f4 0%, #3ae3de 100%);
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 10px 36px 0 rgba(58, 227, 222, 0.19);
+}
+
+button:disabled {
+  background: linear-gradient(90deg, #33334a 0%, #242432 100%);
+  color: #a1a1aa;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.video-preview {
+  width: 100%;
+  max-width: 500px;
+  aspect-ratio: 16 / 9;
+  margin: 22px 0 16px 0;
+  border-radius: 16px;
+  box-shadow: 0 4px 32px 0 rgba(58, 227, 222, 0.23), 0 1.5px 16px 0 rgba(255, 97, 244, 0.11);
+  background: linear-gradient(100deg, #10111a 0%, #18181b 100%);
+  object-fit: contain;
+  display: block;
+  border: 2.5px solid #3ae3de;
+}
+
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-bottom: 28px;
+  justify-content: center;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 28px;
+  margin-bottom: 28px;
+  justify-content: center;
+}
+
+@media (max-width: 700px) {
+  .App-header {
+    padding: 20px 6px;
+    max-width: 98vw;
+  }
+  h1 {
+    font-size: 1.7rem;
+  }
+  .video-preview {
+    max-width: 97vw;
+  }
+}
+
+@media (max-width: 500px) {
+  .App-header {
+    padding: 14px 6px;
+  }
+  h1 {
+    font-size: 1.4rem;
+  }
+  .video-preview {
+    max-width: 98vw;
+  }
+}
+
+/* Center the main title */
+h1 {
+  text-align: center;
+}
+
+/* Special neon styles for Stop and Save buttons */
+.neon-stop {
+  background: linear-gradient(90deg, #ff61f4 0%, #ff2c6d 100%) !important;
+  box-shadow: 0 0 12px #ff61f4aa, 0 0 36px #ff2c6daa;
+  color: #fff;
+  border: none;
+}
+.neon-stop:hover {
+  background: linear-gradient(90deg, #ff2c6d 0%, #ff61f4 100%) !important;
+  box-shadow: 0 0 32px #ff61f4dd, 0 0 40px #ff2c6ddd;
+}
+
+.neon-save {
+  background: linear-gradient(90deg, #30ffd7 0%, #36d1c4 100%) !important;
+  box-shadow: 0 0 18px #30ffd777, 0 0 36px #36d1c4aa;
+  color: #18181b;
+  border: none;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.neon-save:hover {
+  background: linear-gradient(90deg, #36d1c4 0%, #30ffd7 100%) !important;
+  box-shadow: 0 0 36px #30ffd7cc, 0 0 40px #36d1c4cc;
+}
