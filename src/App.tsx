@@ -115,8 +115,9 @@ function App() {
             video: getResolutionConstraints(),
           });
           streamKeys.push('screen');
-        } catch {
-          alert('Could not get screen stream.');
+        } catch (err: any) {
+          alert('Could not get screen stream.\nError: ' + (err && err.message ? err.message : err));
+          cleanupRecording();
           return;
         }
       }
@@ -131,9 +132,22 @@ function App() {
             });
             streams['camera_' + camId] = camStream;
             streamKeys.push('camera_' + camId);
-          } catch {
-            alert('Could not get camera stream for device: ' + camId);
-            return;
+          } catch (err: any) {
+            // Try requesting permission for camera first, then retry with deviceId
+            try {
+              await navigator.mediaDevices.getUserMedia({ video: true });
+              // Retry with specific camera
+              const camStream = await navigator.mediaDevices.getUserMedia({
+                video: { deviceId: { exact: camId } },
+                audio: false,
+              });
+              streams['camera_' + camId] = camStream;
+              streamKeys.push('camera_' + camId);
+            } catch (finalErr: any) {
+              alert('Could not get camera stream for device: ' + camId + '\nError: ' + (finalErr && finalErr.message ? finalErr.message : finalErr));
+              cleanupRecording();
+              return;
+            }
           }
         }
       }
@@ -152,9 +166,24 @@ function App() {
               video: false,
             });
             micStreams['mic_' + micId] = micStream;
-          } catch {
-            alert('Could not get microphone audio stream for device: ' + micId);
-            return;
+          } catch (err: any) {
+            try {
+              await navigator.mediaDevices.getUserMedia({ audio: true });
+              // Retry with specific mic
+              const micStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                  deviceId: { exact: micId },
+                  echoCancellation: true,
+                  noiseSuppression: true,
+                },
+                video: false,
+              });
+              micStreams['mic_' + micId] = micStream;
+            } catch (finalErr: any) {
+              alert('Could not get microphone audio stream for device: ' + micId + '\nError: ' + (finalErr && finalErr.message ? finalErr.message : finalErr));
+              cleanupRecording();
+              return;
+            }
           }
         }
       }
