@@ -175,10 +175,14 @@
   display: flex;
   align-items: center;
   font-size: 0.85rem;
-  color: #ff69d9;
+  color: #ff66cc; /* pink text for label */
   text-shadow: 0 0 8px rgba(255, 105, 217, 0.3);
   padding: 4px 4px 4px 0;
   cursor: pointer;
+}
+
+.device-submenu label .device-permission {
+  color: #ffffff !important;
 }
 
 /* Device submenu checkbox */
@@ -470,6 +474,8 @@ button:disabled {
   object-fit: contain;
   display: block;
   border: 2.5px solid #3ae3de;
+  transform: rotate(0deg);
+  transition: transform 0.2s ease;
 }
 
 @media (max-width: 700px) {
@@ -896,7 +902,7 @@ button.clear-all-button:hover {
 /* Updated confirmation-modal styling to match neon pink/purple modal styling */
 .confirmation-modal {
   position: fixed;
-  top: 0;
+  top: 50%;
   left: 0;
   width: 100vw;
   height: 100vh;
@@ -905,6 +911,7 @@ button.clear-all-button:hover {
   justify-content: center;
   align-items: center;
   z-index: 99999;
+  transform: translateY(-50%);
 }
 
 .confirmation-modal .modal-box {
@@ -959,7 +966,7 @@ button.clear-all-button:hover {
 /* Confirmation popup with pink/purple visual theme */
 .confirm-modal {
   position: fixed;
-  top: 0;
+  top: 50%;
   left: 0;
   width: 100vw;
   height: 100vh;
@@ -968,6 +975,7 @@ button.clear-all-button:hover {
   justify-content: center;
   align-items: center;
   z-index: 9999;
+  transform: translateY(-50%);
 }
 
 .confirm-modal-content {
@@ -1039,4 +1047,41 @@ button.clear-all-button:hover {
 
 .popup-button.cancel:hover {
   background-color: #555;
+}
+
+.rotate-90 {
+  transform: rotate(90deg);
+}
+
+.rotate-270 {
+  transform: rotate(270deg);
+}
+.device-submenu input[type="radio"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #30ffd7;
+  border-radius: 50%;
+  background-color: transparent;
+  position: relative;
+  box-shadow: 0 0 4px #30ffd777;
+  margin-right: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.device-submenu input[type="radio"]:checked {
+  border-color: #beadff;
+  box-shadow: 0 0 6px #beadff77;
+}
+
+.device-submenu input[type="radio"]:checked::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #beadff;
 }

@@ -197,6 +197,10 @@ function App() {
   // Camera/mic device detection state
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
+  // State for selected camera (radio selection)
+  const [selectedCamera, setSelectedCamera] = useState<MediaDeviceInfo | null>(null);
+  // State for camera permission
+  const [cameraPermission, setCameraPermission] = useState<string>("unknown");
   // Utility: get the full native screen resolution (physical pixels)
   function getFullScreenResolutionLabel(): string {
     const width = Math.floor(window.screen.width * window.devicePixelRatio);
@@ -236,20 +240,45 @@ function App() {
     ]);
   }, [actualScreenResolution]);
 
-  useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then(devices => {
-      const videoInputs = devices.filter(device => device.kind === 'videoinput');
-      setCameraDevices(videoInputs);
-      const audioInputs = devices.filter(device => device.kind === 'audioinput');
-      setMicDevices(audioInputs);
-      // Reset all sub-device selections and parent checkboxes on device detection
-      setRecordOptions({
-        screenIds: [],
-        cameraIds: [],
-        mic: false,
-        micIds: [],
-      });
+  // Helper: get available devices and ensure labels
+  const getAvailableDevices = async () => {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    let videoDevices = devices.filter(device => device.kind === 'videoinput');
+    let audioDevices = devices.filter(device => device.kind === 'audioinput');
+    // Assign fallback labels for video devices if missing
+    videoDevices = videoDevices.map((device, idx) => {
+      if (!device.label || device.label.trim() === "") {
+        return {
+          ...device,
+          label: `Camera ${idx + 1}`
+        };
+      }
+      return device;
     });
+    setCameraDevices(videoDevices);
+    setMicDevices(audioDevices);
+    // Remove default camera selection on load
+    // Do not setSelectedCamera(videoDevices[0]) automatically
+    // Reset all sub-device selections and parent checkboxes on device detection
+    setRecordOptions({
+      screenIds: [],
+      cameraIds: [],
+      mic: false,
+      micIds: [],
+    });
+  };
+  useEffect(() => {
+    getAvailableDevices();
+    // Check camera permission status
+    (async () => {
+      try {
+        const status = await navigator.permissions.query({ name: "camera" as PermissionName });
+        setCameraPermission(status.state);
+      } catch {
+        setCameraPermission("unknown");
+      }
+    })();
+    // eslint-disable-next-line
   }, []);
 
   // Camera stream initialization with facingMode constraint
@@ -1081,19 +1110,25 @@ function App() {
                     )}
                   </div>
                   {/* Camera */}
-                  <div className={`option-block${recordOptions.cameraIds.length > 0 ? ' has-submenu' : ''}`}>
+                  {/*
+                    Camera radio selection logic:
+                    - Only one camera can be selected at a time.
+                    - Render all camera devices as radio buttons inside the submenu.
+                  */}
+                  <div className={`option-block${selectedCamera ? ' has-submenu' : ''}`}>
                     <label className="options-checkbox">
                       <input
                         type="checkbox"
-                        checked={recordOptions.cameraIds.length > 0}
+                        checked={!!selectedCamera}
                         onChange={e => {
                           if (e.target.checked) {
-                            let cameraIds = recordOptions.cameraIds;
-                            if (cameraIds.length === 0 && cameraDevices.length > 0) {
-                              cameraIds = [cameraDevices[0].deviceId];
+                            // Default to first camera if none selected
+                            if (cameraDevices.length > 0) {
+                              setSelectedCamera(cameraDevices[0]);
+                              setRecordOptions({ ...recordOptions, cameraIds: [cameraDevices[0].deviceId] });
                             }
-                            setRecordOptions({ ...recordOptions, cameraIds });
                           } else {
+                            setSelectedCamera(null);
                             setRecordOptions({ ...recordOptions, cameraIds: [] });
                           }
                         }}
@@ -1101,40 +1136,22 @@ function App() {
                       />
                       Camera
                     </label>
-                    {recordOptions.cameraIds.length > 0 && (
+                    {selectedCamera && (
                       <div className="device-submenu">
-                        {cameraDevices.map(device => (
-                          <label key={device.deviceId}>
+                        {/* Camera device selection as radio buttons */}
+                        {cameraDevices.map((device) => (
+                          <label key={device.deviceId} className="device-item">
                             <input
-                              type="checkbox"
-                              checked={recordOptions.cameraIds.includes(device.deviceId)}
-                              onChange={e => {
-                                let cameraIds = [...recordOptions.cameraIds];
-                                if (e.target.checked) {
-                                  if (!cameraIds.includes(device.deviceId)) cameraIds.push(device.deviceId);
-                                } else {
-                                  cameraIds = cameraIds.filter(id => id !== device.deviceId);
-                                }
-                                setRecordOptions({ ...recordOptions, cameraIds });
+                              type="radio"
+                              name="cameraSelection"
+                              checked={selectedCamera?.deviceId === device.deviceId}
+                              onChange={() => {
+                                setSelectedCamera(device);
+                                setRecordOptions({ ...recordOptions, cameraIds: [device.deviceId] });
                               }}
-                              className="styled-checkbox"
                             />
-                            <span className="device-label">
-                              {device.label || `Camera ${device.deviceId.slice(-4)}`}
-                              {recordOptions.cameraIds.includes(device.deviceId) && (
-                                <span
-                                  className={`device-permission ${
-                                    permissionStatus.camera === 'denied'
-                                      ? 'status-denied'
-                                      : permissionStatus.camera === 'granted'
-                                      ? 'status-granted'
-                                      : 'status-unknown'
-                                  }`}
-                                >
-                                  : {permissionStatus.camera || 'TBD'}
-                                </span>
-                              )}
-                            </span>
+                            <span className="device-label">{device.label || "Camera"}</span>
+                            <span className={`device-permission${cameraPermission === "granted" ? " granted" : ""}`}>{cameraPermission === "granted" ? ":granted" : ""}</span>
                           </label>
                         ))}
                       </div>
@@ -1362,55 +1379,52 @@ function App() {
               </div>
             </div>
           )}
-          {recordOptions.cameraIds && recordOptions.cameraIds.map(camId =>
-            videoUrls['camera_' + camId] ? (
-              <div key={camId} style={{marginBottom: '20px', textAlign: 'center'}}>
-                <h3>
-                  Camera&nbsp;
-                  {cameraDevices.find(d => d.deviceId === camId)?.label ||
-                    `Camera ${camId.slice(-4)}`}
-                </h3>
-                <video
-                  src={videoUrls['camera_' + camId] || undefined}
-                  controls
-                  className="video-preview"
-                />
-                <div className="save-button-container">
-                  <button
-                    className="neon-save"
-                    onClick={() => handleDownload(chunks.current['camera_' + camId] || [], generateFilename("cam", videoResolution), 'camera')}
-                    style={{marginTop: '8px'}}
-                  >
-                    {savedStatus['camera'] ? 'Saved' : 'Save'}
-                  </button>
-                  <button
-                    className="neon-save"
-                    onClick={() => {
-                      const chunksArr = chunks.current['camera_' + camId] || [];
-                      if (!chunksArr.length) return;
-                      const blob = new Blob(chunksArr, { type: 'video/webm' });
-                      const fileName = generateFilename("cam", videoResolution);
-                      if (navigator.share && blob) {
-                        const file = new File([blob], fileName, { type: blob.type });
-                        navigator.share({
-                          title: 'Screen Recording',
-                          text: 'Check out this recording!',
-                          files: [file],
-                        });
-                      } else {
-                        handleDownload(blob, fileName, 'camera');
-                      }
-                    }}
-                    style={{marginTop: '8px'}}
-                  >
-                    Share
-                  </button>
-                  <span className="file-size">
-                    {formatSize(chunks.current['camera_' + camId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
-                  </span>
-                </div>
+          {selectedCamera && videoUrls['camera_' + selectedCamera.deviceId] && (
+            <div key={selectedCamera.deviceId} style={{marginBottom: '20px', textAlign: 'center'}}>
+              <h3>
+                Camera&nbsp;
+                {selectedCamera.label || `Camera ${selectedCamera.deviceId.slice(-4)}`}
+              </h3>
+              <video
+                src={videoUrls['camera_' + selectedCamera.deviceId] || undefined}
+                controls
+                className="video-preview"
+              />
+              <div className="save-button-container">
+                <button
+                  className="neon-save"
+                  onClick={() => handleDownload(chunks.current['camera_' + selectedCamera.deviceId] || [], generateFilename("cam", videoResolution), 'camera')}
+                  style={{marginTop: '8px'}}
+                >
+                  {savedStatus['camera'] ? 'Saved' : 'Save'}
+                </button>
+                <button
+                  className="neon-save"
+                  onClick={() => {
+                    const chunksArr = chunks.current['camera_' + selectedCamera.deviceId] || [];
+                    if (!chunksArr.length) return;
+                    const blob = new Blob(chunksArr, { type: 'video/webm' });
+                    const fileName = generateFilename("cam", videoResolution);
+                    if (navigator.share && blob) {
+                      const file = new File([blob], fileName, { type: blob.type });
+                      navigator.share({
+                        title: 'Screen Recording',
+                        text: 'Check out this recording!',
+                        files: [file],
+                      });
+                    } else {
+                      handleDownload(blob, fileName, 'camera');
+                    }
+                  }}
+                  style={{marginTop: '8px'}}
+                >
+                  Share
+                </button>
+                <span className="file-size">
+                  {formatSize(chunks.current['camera_' + selectedCamera.deviceId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
+                </span>
               </div>
-            ) : null
+            </div>
           )}
           {recordOptions.mic && recordOptions.micIds && recordOptions.micIds.map(micId =>
             audioUrls['mic_' + micId] ? (
@@ -1501,23 +1515,47 @@ function App() {
   );
 }
 
-export default App;
-  // Example function for starting camera recording with updated constraints and orientation detection
-  // You may need to integrate this function as needed in your codebase
-  const startCameraRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: cameraFacingMode,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-        audio: true,
-      });
-      const orientation = detectVideoOrientation(stream);
-      console.log('Video orientation:', orientation);
-      // ...the rest of your camera recording logic here...
-    } catch (err) {
-      console.error('Error starting camera recording:', err);
+// Camera preview ref for orientation/rotation (MOVED TO TOP LEVEL)
+const cameraPreviewRef = React.createRef<HTMLVideoElement>();
+
+// Example function for starting camera recording with updated constraints and orientation detection
+// You may need to integrate this function as needed in your codebase
+async function startCameraRecording(selectedCamera: MediaDeviceInfo | null, recording: boolean) {
+  try {
+    const videoConstraints = {
+      deviceId: selectedCamera ? { exact: selectedCamera.deviceId } : undefined,
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      facingMode: "user",
+    };
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: videoConstraints,
+      audio: true,
+    });
+    // Attach stream to preview video element
+    if (cameraPreviewRef.current) {
+      cameraPreviewRef.current.srcObject = stream;
+      // Detect orientation and rotate accordingly
+      const videoTrack = stream.getVideoTracks()[0];
+      const settings = videoTrack.getSettings();
+      if (settings.width && settings.height) {
+        cameraPreviewRef.current.style.transform =
+          settings.height > settings.width ? "rotate(0deg)" : "rotate(90deg)";
+      }
     }
-  };
+    // ...the rest of your camera recording logic here...
+  } catch (err) {
+    console.error('Error starting camera recording:', err);
+  }
+}
+
+// Reset transform on preview clear or recording stop (MOVED TO TOP LEVEL)
+function useResetCameraPreviewTransform(recording: boolean) {
+  useEffect(() => {
+    if (!recording && cameraPreviewRef.current) {
+      cameraPreviewRef.current.style.transform = "";
+    }
+  }, [recording]);
+}
+
+export default App;
