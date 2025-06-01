@@ -1,10 +1,73 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
+// Utility function to get the full native screen resolution (physical pixels)
+const getDeviceResolution = () => {
+  const width = Math.floor(window.screen.width * window.devicePixelRatio);
+  const height = Math.floor(window.screen.height * window.devicePixelRatio);
+  return { width, height };
+};
+
+// Utility function to generate a filename for recordings
+const generateFilename = (streamType: string, resolution?: string): string => {
+  const now = new Date();
+  const formattedDate = now.toLocaleDateString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "2-digit",
+  }).replace(/\//g, "-");
+
+  const formattedTime = now.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).toLowerCase().replace(":", "").replace(" ", "");
+
+  let deviceName = "recording";
+  if (streamType === "cam") {
+    deviceName = "cam";
+  } else if (streamType === "mic") {
+    deviceName = "mic";
+  } else if (streamType === "screen") {
+    // Use improved logic for screen filename with resolution
+    const selectedResolution = resolution;
+    const resolutionPart = selectedResolution && selectedResolution !== "fullscreen"
+      ? selectedResolution.toLowerCase()
+      : "";
+    const resolutionTag = resolutionPart ? `screen${resolutionPart}` : "screen";
+    return `${resolutionTag}_${formattedDate}_${formattedTime}.webm`;
+    // deviceName = resolution ? `screen${resolution}` : "screen"; // (removed old line)
+  }
+
+  return `${deviceName}_${formattedDate}_${formattedTime}.webm`;
+};
+
 // All hooks and related functions must be inside the App component!
 
 
 function App() {
+  // Download helper function for blobs (video/audio)
+  const handleDownload = (blobOrChunks: Blob[] | Blob, fileName: string, deviceName?: string) => {
+    let blob: Blob;
+    if (Array.isArray(blobOrChunks)) {
+      blob = new Blob(blobOrChunks, { type: 'video/webm' });
+    } else {
+      blob = blobOrChunks;
+    }
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    link.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(link.href);
+    }, 1000);
+    // Set saved status if deviceName is provided
+    if (deviceName) {
+      setSavedStatus(prev => ({ ...prev, [deviceName]: true }));
+    }
+  };
+  // Track saved status for each device (screen, camera, mic)
+  const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
   // Mobile device detection
   const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   // Permission status state
@@ -59,6 +122,26 @@ function App() {
     best: 8_000_000,
   };
 
+  // --- Screen resolution label for UI ---
+  // Always use device's full physical resolution (device pixels)
+  const screenResolution = `${Math.floor(window.screen.width * window.devicePixelRatio)}x${Math.floor(window.screen.height * window.devicePixelRatio)}`;
+  // For dropdowns, use this for "Max" option
+  const screenResolutions = [`Max (${screenResolution})`, "1080p", "720p"];
+
+  // Example: availableScreenResolutions state (for future use)
+  const [availableScreenResolutions, setAvailableScreenResolutions] = useState<string[]>([]);
+  useEffect(() => {
+    const screenWidth = window.screen.width;
+    const screenHeight = window.screen.height;
+
+    setAvailableScreenResolutions([
+      `${screenWidth}x${screenHeight}`,
+      "1920x1080",
+      "1280x720",
+      "640x480",
+    ]);
+  }, []);
+
   // Helper to load ffmpeg.wasm if not already loaded
   const loadFFmpeg = async () => {
     if (!ffmpeg.current) {
@@ -103,10 +186,44 @@ function App() {
   // Camera/mic device detection state
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
-  // Placeholder for future multi-screen support
-  const [screenDevices] = useState<{ deviceId: string; label?: string }[]>([
-    { deviceId: "main", label: "Main Screen (1920×1080)" }
-  ]);
+  // Utility: get the full native screen resolution (physical pixels)
+  function getFullScreenResolutionLabel(): string {
+    const width = Math.floor(window.screen.width * window.devicePixelRatio);
+    const height = Math.floor(window.screen.height * window.devicePixelRatio);
+    return `${width}x${height}`;
+  }
+  // Detect full screen resolution (physical screen, not browser window)
+  const [fullScreenResolution, setFullScreenResolution] = useState<string>('');
+  useEffect(() => {
+    setFullScreenResolution(getFullScreenResolutionLabel());
+  }, []);
+
+  // Actual screen resolution in physical pixels (not CSS pixels)
+  const [actualScreenResolution, setActualScreenResolution] = useState("");
+  useEffect(() => {
+    const screenWidth = Math.floor(window.screen.width * window.devicePixelRatio);
+    const screenHeight = Math.floor(window.screen.height * window.devicePixelRatio);
+    setActualScreenResolution(`${screenWidth}x${screenHeight}`);
+  }, []);
+
+  // Placeholder for future multi-screen support, label updated below
+  // Now include width and height in the screenDevices state
+  const [screenDevices, setScreenDevices] = useState<{ deviceId: string; label?: string; width?: number; height?: number }[]>([]);
+  useEffect(() => {
+    // Set up the label to include the actual detected screen resolution
+    const width = window.screen.width;
+    const height = window.screen.height;
+    setScreenDevices([
+      {
+        deviceId: "main",
+        label: actualScreenResolution
+          ? `Screen (${actualScreenResolution})`
+          : "Screen (Detecting...)",
+        width,
+        height,
+      }
+    ]);
+  }, [actualScreenResolution]);
 
   useEffect(() => {
     navigator.mediaDevices.enumerateDevices().then(devices => {
@@ -124,14 +241,30 @@ function App() {
     });
   }, []);
 
-  const getMaxResolutionLabel = () => {
-    const width = window.screen.width * window.devicePixelRatio;
-    const height = window.screen.height * window.devicePixelRatio;
-    if (width >= 3840 || height >= 2160) return 'Max 4K';
-    if (width >= 1920 || height >= 1080) return 'Max 1080p';
-    if (width >= 1280 || height >= 720) return 'Max 720p';
-    return 'Max 480p';
-  };
+  // Compute maxResolutionLabel based on detected screen resolution
+  // Use "4k" for height >= 2160, "1440p" for height >= 1440, otherwise fallback to "1080p", etc.
+  const [maxResolutionLabel, setMaxResolutionLabel] = useState("1080p");
+  useEffect(() => {
+    const width = window.screen.width;
+    const height = window.screen.height;
+    let label = "";
+    if (height >= 2160 || width >= 3840) {
+      label = "4k";
+    } else if (height >= 1440 || width >= 2560) {
+      label = "1440p";
+    } else if (height >= 1080 || width >= 1920) {
+      label = "1080p";
+    } else if (height >= 720 || width >= 1280) {
+      label = "720p";
+    } else if (height >= 480 || width >= 854) {
+      label = "480p";
+    } else if (height >= 360 || width >= 640) {
+      label = "360p";
+    } else {
+      label = `${width}x${height}`;
+    }
+    setMaxResolutionLabel(label);
+  }, [fullScreenResolution]);
 
   const startRecording = async () => {
     try {
@@ -383,10 +516,23 @@ function App() {
   };
 
   const stopRecording = () => {
+    // Reset saved status for all relevant device types (screen, camera, mic)
+    if (recordOptions.screenIds.includes('main')) {
+      setSavedStatus(prev => ({ ...prev, screen: false }));
+    }
+    if (recordOptions.cameraIds && recordOptions.cameraIds.length > 0) {
+      setSavedStatus(prev => ({ ...prev, camera: false }));
+    }
+    if (recordOptions.mic && recordOptions.micIds && recordOptions.micIds.length > 0) {
+      setSavedStatus(prev => ({ ...prev, mic: false }));
+    }
     cleanupRecording();
   };
 
-  // "Save As" handler using File System Access API or fallback
+  // UI feedback state for sharing/downloading
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  // "Save As" handler using File System Access API or fallback, with mobile sharing
   const saveFile = async (type: 'screen' | 'camera' | 'mic', isAudio: boolean) => {
     const url = isAudio ? audioUrls[type] : videoUrls[type];
     if (!url) return;
@@ -423,17 +569,18 @@ function App() {
     } else if (type === 'screen') {
       filename = 'video.' + extension;
     } else if (type === 'camera') {
-      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const isMobileTemp = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
       // Default to rear if we can't detect
-      filename = (isMobile ? 'cam-rear' : 'cam') + '.' + extension;
+      filename = (isMobileTemp ? 'cam-rear' : 'cam') + '.' + extension;
     }
 
+    let blob: Blob | null = null;
     if (ffmpegArgs.length) {
       setIsConverting(true);
       await loadFFmpeg();
 
       // Fetch the recorded blob as a file
-      const blob = await fetch(url).then(r => r.blob());
+      blob = await fetch(url).then(r => r.blob());
       const { fetchFile } = await import('@ffmpeg/ffmpeg');
       ffmpeg.current.FS('writeFile', 'input.webm', await fetchFile(blob));
 
@@ -449,8 +596,32 @@ function App() {
             : `audio/${extension}`,
       });
       outUrl = URL.createObjectURL(convertedBlob);
-
+      blob = convertedBlob;
       setIsConverting(false);
+    } else {
+      blob = await fetch(url).then(r => r.blob());
+    }
+
+    // --- Mobile sharing logic ---
+    // Create file object for sharing
+    const file = new File([blob], filename, { type: blob.type });
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const shareSupported = !!navigator.canShare && navigator.canShare({ files: [file] });
+
+    if (isMobile && shareSupported) {
+      try {
+        await navigator.share({
+          title: filename,
+          text: 'Screen recording',
+          files: [file],
+        });
+        setSaveMessage('Video shared successfully!');
+        console.log('Video shared successfully');
+        return;
+      } catch (error) {
+        console.error('Sharing failed, falling back to download:', error);
+        // If sharing fails, continue to download fallback
+      }
     }
 
     // @ts-ignore
@@ -472,14 +643,12 @@ function App() {
           ],
         });
         const writable = await handle.createWritable();
-        const response = await fetch(outUrl);
-        const finalBlob = await response.blob();
-        await writable.write(finalBlob);
+        await writable.write(blob);
         await writable.close();
-        alert('File saved!');
+        setSaveMessage('File saved!');
       } catch (err) {
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
-          alert('Error saving file: ' + err);
+          setSaveMessage('Error saving file: ' + err);
         }
       }
     } else {
@@ -490,7 +659,7 @@ function App() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      alert(
+      setSaveMessage(
         'Your browser does not support selecting a save folder, so file was saved to your Downloads folder.'
       );
     }
@@ -692,47 +861,76 @@ function App() {
                           }
                           setRecordOptions({ ...recordOptions, screenIds });
                         }}
+                        className="styled-checkbox"
                       />
+                      {/* Show the label as just "Screen" */}
                       Screen
                     </label>
                     {recordOptions.screenIds.length > 0 && (
                       <div className="device-submenu">
                         {/* Multi-screen dynamic rendering, mobile support */}
-                        {!isMobile ? (
-                          screenDevices.map(device => (
-                            <label key={device.deviceId}>
-                              <input
-                                type="checkbox"
-                                checked={recordOptions.screenIds.includes(device.deviceId)}
-                                onChange={(e) => {
-                                  let screenIds = [...recordOptions.screenIds];
-                                  if (e.target.checked) {
-                                    if (!screenIds.includes(device.deviceId)) screenIds.push(device.deviceId);
-                                  } else {
-                                    screenIds = screenIds.filter((id) => id !== device.deviceId);
-                                  }
-                                  setRecordOptions({ ...recordOptions, screenIds });
-                                }}
-                              />
-                              <span className="device-label">
-                                {device.label || `Screen ${device.deviceId.slice(-4)}`}
-                                {recordOptions.screenIds.includes(device.deviceId) && (
-                                  <span
-                                    className={`device-permission ${
-                                      permissionStatus.screen === 'denied'
-                                        ? 'status-denied'
-                                        : permissionStatus.screen === 'granted'
-                                        ? 'status-granted'
-                                        : 'status-unknown'
-                                    }`}
-                                  >
-                                    : {permissionStatus.screen || 'TBD'}
-                                  </span>
-                                )}
-                              </span>
-                            </label>
-                          ))
-                        ) : (
+                    {!isMobile ? (
+                      screenDevices.map((device, index) => {
+                        // Prefer width/height from device, fallback to parsing label, fallback to undefined
+                        let width: number | undefined = device.width, height: number | undefined = device.height;
+                        if ((width === undefined || height === undefined) && device.label) {
+                          const match = device.label.match(/(\d+)x(\d+)/);
+                          if (match) {
+                            width = parseInt(match[1], 10);
+                            height = parseInt(match[2], 10);
+                          }
+                        }
+                        // Compose the new label: always include resolution if available
+                        let label = "";
+                        if (device.label) {
+                          // Remove any existing "(WxH)" part from label
+                          label = device.label.replace(/\s*\(\d+x\d+\)/, "");
+                        } else {
+                          label = `Screen ${index + 1}`;
+                        }
+                        if (width && height) {
+                          label += ` (${width}x${height})`;
+                        }
+                        // Update: show actualScreenResolution in label if present
+                        if (device.deviceId === "main" && actualScreenResolution) {
+                          label = `Screen (${actualScreenResolution})`;
+                        }
+                        return (
+                          <label key={device.deviceId}>
+                            <input
+                              type="checkbox"
+                              checked={recordOptions.screenIds.includes(device.deviceId)}
+                              onChange={(e) => {
+                                let screenIds = [...recordOptions.screenIds];
+                                if (e.target.checked) {
+                                  if (!screenIds.includes(device.deviceId)) screenIds.push(device.deviceId);
+                                } else {
+                                  screenIds = screenIds.filter((id) => id !== device.deviceId);
+                                }
+                                setRecordOptions({ ...recordOptions, screenIds });
+                              }}
+                              className="styled-checkbox"
+                            />
+                            <span className="device-label">
+                              {label}
+                              {recordOptions.screenIds.includes(device.deviceId) && (
+                                <span
+                                  className={`device-permission ${
+                                    permissionStatus.screen === 'denied'
+                                      ? 'status-denied'
+                                      : permissionStatus.screen === 'granted'
+                                      ? 'status-granted'
+                                      : 'status-unknown'
+                                  }`}
+                                >
+                                  : {permissionStatus.screen || 'TBD'}
+                                </span>
+                              )}
+                            </span>
+                          </label>
+                        );
+                      })
+                    ) : (
                           <p style={{ color: '#bbb', fontSize: '0.85rem', marginTop: '0.5rem' }}>
                             Screen recording is not supported on mobile devices. Please try on desktop.
                           </p>
@@ -757,6 +955,7 @@ function App() {
                             setRecordOptions({ ...recordOptions, mic: false, micIds: [] });
                           }
                         }}
+                        className="styled-checkbox"
                       />
                       Mic
                     </label>
@@ -776,6 +975,7 @@ function App() {
                                 }
                                 setRecordOptions({ ...recordOptions, micIds });
                               }}
+                              className="styled-checkbox"
                             />
                             <span className="device-label">
                               {device.label || `Mic ${device.deviceId.slice(-4)}`}
@@ -815,6 +1015,7 @@ function App() {
                             setRecordOptions({ ...recordOptions, cameraIds: [] });
                           }
                         }}
+                        className="styled-checkbox"
                       />
                       Camera
                     </label>
@@ -834,6 +1035,7 @@ function App() {
                                 }
                                 setRecordOptions({ ...recordOptions, cameraIds });
                               }}
+                              className="styled-checkbox"
                             />
                             <span className="device-label">
                               {device.label || `Camera ${device.deviceId.slice(-4)}`}
@@ -884,18 +1086,56 @@ function App() {
             <div className="settings-row">
               <div className="settings-label">Resolution:</div>
               <div className="settings-control">
-                <select
-                  className="control-select"
-                  value={videoResolution}
-                  onChange={e => setVideoResolution(e.target.value as any)}
-                  style={{ width: "200px" }}
-                >
-                  <option value="fullscreen">{getMaxResolutionLabel()}</option>
-                  <option value="1080p">1080p</option>
-                  <option value="720p">720p</option>
-                  <option value="480p">480p</option>
-                  <option value="360p">360p</option>
-                </select>
+                {(() => {
+                  // Build availableResolutions as per instructions
+                  const availableResolutions = [
+                    { label: "720p", width: 1280, height: 720, value: "720p" },
+                    { label: "1080p", width: 1920, height: 1080, value: "1080p" },
+                  ];
+                  // Use physical pixels for gating 1440p/4k
+                  const physicalHeight = Math.floor(window.screen.height * window.devicePixelRatio);
+                  if (physicalHeight >= 1440) {
+                    availableResolutions.push({ label: "1440p", width: 2560, height: 1440, value: "1440p" });
+                  }
+                  if (physicalHeight >= 2160) {
+                    availableResolutions.push({ label: "4k", width: 3840, height: 2160, value: "4k" });
+                  }
+                  availableResolutions.push({
+                    label: `Max (${window.screen.width}×${window.screen.height})`,
+                    width: window.screen.width,
+                    height: window.screen.height,
+                    value: "fullscreen"
+                  });
+                  // Always add 480p and 360p for compatibility
+                  const extraResolutions = [
+                    { label: "480p", width: 854, height: 480, value: "480p" },
+                    { label: "360p", width: 640, height: 360, value: "360p" },
+                  ];
+                  // Remove duplicates by value
+                  const allResolutions = [
+                    ...availableResolutions,
+                    ...extraResolutions.filter(er => !availableResolutions.some(r => r.value === er.value)),
+                  ];
+                  // For dropdown, "fullscreen" (Max) should be first, then descending order
+                  const sortedResolutions = [
+                    ...allResolutions.filter(r => r.value === "fullscreen"),
+                    ...allResolutions.filter(r => r.value !== "fullscreen").sort((a, b) => b.height - a.height),
+                  ];
+                  return (
+                    <select
+                      className="control-select"
+                      value={videoResolution}
+                      onChange={e => setVideoResolution(e.target.value as any)}
+                      style={{ width: "200px" }}
+                    >
+                      {sortedResolutions.map(r => (
+                        <option key={r.value} value={r.value}>
+                          {r.value === "fullscreen" ? `Max (${actualScreenResolution})` : r.label}
+                        </option>
+                      ))}
+                    </select>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -960,6 +1200,32 @@ function App() {
         )}
 
         <div className="preview-controls" style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+          {saveMessage && (
+            <div className="save-toast" style={{
+              background: '#222',
+              color: '#fff',
+              padding: '10px 22px',
+              borderRadius: '8px',
+              margin: '12px 0',
+              boxShadow: '0 2px 12px #0007',
+              fontWeight: 500,
+              zIndex: 1000,
+            }}>
+              {saveMessage}
+              <button
+                style={{
+                  marginLeft: 18,
+                  background: 'transparent',
+                  color: '#fff',
+                  border: 'none',
+                  fontSize: '1.2em',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setSaveMessage(null)}
+                aria-label="Close"
+              >×</button>
+            </div>
+          )}
           {recordOptions.screenIds.includes('main') && videoUrls.screen && (
             <div style={{marginBottom: '20px', textAlign: 'center'}}>
               <h3>Screen Video</h3>
@@ -971,9 +1237,30 @@ function App() {
               <div className="save-button-container">
                 <button
                   className="neon-save"
-                  onClick={() => saveFile('screen', false)}
+                  onClick={() => handleDownload(chunks.current['screen'] || [], generateFilename("screen", videoResolution), 'screen')}
                 >
-                  Save Screen Recording
+                  {savedStatus['screen'] ? 'Saved' : 'Save'}
+                </button>
+                <button
+                  className="neon-save"
+                  onClick={() => {
+                    const chunksArr = chunks.current['screen'] || [];
+                    if (!chunksArr.length) return;
+                    const blob = new Blob(chunksArr, { type: 'video/webm' });
+                    const fileName = generateFilename("screen", videoResolution);
+                    if (navigator.share && blob) {
+                      const file = new File([blob], fileName, { type: blob.type });
+                      navigator.share({
+                        title: 'Screen Recording',
+                        text: 'Check out this recording!',
+                        files: [file],
+                      });
+                    } else {
+                      handleDownload(blob, fileName, 'screen');
+                    }
+                  }}
+                >
+                  Share
                 </button>
                 <span className="file-size">
                   {formatSize(chunks.current['screen']?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
@@ -994,16 +1281,40 @@ function App() {
                   controls
                   className="video-preview"
                 />
-                <button
-                  className="neon-save"
-                  onClick={() => saveFile('camera_' + camId, false)}
-                  style={{marginTop: '8px'}}
-                >
-                  Save Camera Recording
-                </button>
-                <span className="file-size">
-                  {formatSize(chunks.current['camera_' + camId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
-                </span>
+                <div className="save-button-container">
+                  <button
+                    className="neon-save"
+                    onClick={() => handleDownload(chunks.current['camera_' + camId] || [], generateFilename("cam", videoResolution), 'camera')}
+                    style={{marginTop: '8px'}}
+                  >
+                    {savedStatus['camera'] ? 'Saved' : 'Save'}
+                  </button>
+                  <button
+                    className="neon-save"
+                    onClick={() => {
+                      const chunksArr = chunks.current['camera_' + camId] || [];
+                      if (!chunksArr.length) return;
+                      const blob = new Blob(chunksArr, { type: 'video/webm' });
+                      const fileName = generateFilename("cam", videoResolution);
+                      if (navigator.share && blob) {
+                        const file = new File([blob], fileName, { type: blob.type });
+                        navigator.share({
+                          title: 'Screen Recording',
+                          text: 'Check out this recording!',
+                          files: [file],
+                        });
+                      } else {
+                        handleDownload(blob, fileName, 'camera');
+                      }
+                    }}
+                    style={{marginTop: '8px'}}
+                  >
+                    Share
+                  </button>
+                  <span className="file-size">
+                    {formatSize(chunks.current['camera_' + camId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
+                  </span>
+                </div>
               </div>
             ) : null
           )}
@@ -1022,9 +1333,30 @@ function App() {
                 <div className="save-button-container">
                   <button
                     className="neon-save"
-                    onClick={() => saveFile('mic_' + micId, true)}
+                    onClick={() => handleDownload(chunks.current['mic_' + micId] || [], generateFilename("mic", videoResolution), 'mic')}
                   >
-                    Save Microphone Audio
+                    {savedStatus['mic'] ? 'Saved' : 'Save'}
+                  </button>
+                  <button
+                    className="neon-save"
+                    onClick={() => {
+                      const chunksArr = chunks.current['mic_' + micId] || [];
+                      if (!chunksArr.length) return;
+                      const blob = new Blob(chunksArr, { type: 'video/webm' });
+                      const fileName = generateFilename("mic", videoResolution);
+                      if (navigator.share && blob) {
+                        const file = new File([blob], fileName, { type: blob.type });
+                        navigator.share({
+                          title: 'Screen Recording',
+                          text: 'Check out this recording!',
+                          files: [file],
+                        });
+                      } else {
+                        handleDownload(blob, fileName, 'mic');
+                      }
+                    }}
+                  >
+                    Share
                   </button>
                   <span className="file-size">
                     {formatSize(chunks.current['mic_' + micId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
