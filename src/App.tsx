@@ -8,6 +8,18 @@ const getDeviceResolution = () => {
   return { width, height };
 };
 
+// Utility function to detect browser type
+const getBrowserInfo = () => {
+  const ua = navigator.userAgent;
+  const isChrome = /Chrome/.test(ua) && /Google Inc/.test(navigator.vendor);
+  const isSafari = /Safari/.test(ua) && /Apple Computer/.test(navigator.vendor);
+  const isFirefox = /Firefox/.test(ua);
+  const isEdge = /Edg/.test(ua);
+  const isIncognito = !navigator.storage || !navigator.storage.estimate;
+  
+  return { isChrome, isSafari, isFirefox, isEdge, isIncognito };
+};
+
 // Utility function to generate a filename for recordings
 const generateFilename = (streamType: string, resolution?: string): string => {
   const now = new Date();
@@ -36,22 +48,65 @@ const generateFilename = (streamType: string, resolution?: string): string => {
       : "";
     const resolutionTag = resolutionPart ? `screen${resolutionPart}` : "screen";
     return `${resolutionTag}_${formattedDate}_${formattedTime}.webm`;
-    // deviceName = resolution ? `screen${resolution}` : "screen"; // (removed old line)
   }
 
   return `${deviceName}_${formattedDate}_${formattedTime}.webm`;
 };
 
-// All hooks and related functions must be inside the App component!
-
-
 function App() {
-  // Camera facing mode selection state (user = front, environment = rear)
-  const [cameraFacingMode, setCameraFacingMode] = useState<"user" | "environment">("user");
-  // -- BEGIN: Top-level state for "Clear All" modal --
+  // State declarations
   const [showClearConfirmation, setShowClearConfirmation] = useState(false);
   const [hasCleared, setHasCleared] = useState(false);
-  // Download helper function for blobs (video/audio)
+  const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
+  const [permissionStatus, setPermissionStatus] = useState<Record<string, string>>({});
+  const [isConverting, setIsConverting] = useState(false);
+  const [audioQuality, setAudioQuality] = useState('best');
+  const [fileFormat, setFileFormat] = useState('webm');
+  const [videoResolution, setVideoResolution] = useState<'fullscreen' | '1080p' | '720p' | '480p' | '360p'>('fullscreen');
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [mediaRecorders, setMediaRecorders] = useState<{[key:string]: MediaRecorder | null}>({});
+  const [videoUrls, setVideoUrls] = useState<{[key:string]: string | null}>({});
+  const [audioUrls, setAudioUrls] = useState<{[key:string]: string | null}>({});
+  const [supportsDisplayMedia, setSupportsDisplayMedia] = useState(true);
+  const [recordOptions, setRecordOptions] = useState({
+    screenIds: [] as string[],
+    cameraIds: [] as string[],
+    mic: false,
+    micIds: [] as string[],
+  });
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
+  const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState<MediaDeviceInfo | null>(null);
+  const [cameraPermission, setCameraPermission] = useState<string>("unknown");
+  const [fullScreenResolution, setFullScreenResolution] = useState<string>('');
+  const [actualScreenResolution, setActualScreenResolution] = useState("");
+  const [screenDevices, setScreenDevices] = useState<{ deviceId: string; label?: string; width?: number; height?: number }[]>([]);
+  const [availableScreenResolutions, setAvailableScreenResolutions] = useState<string[]>([]);
+  const [maxResolutionLabel, setMaxResolutionLabel] = useState("1080p");
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [recordingSize, setRecordingSize] = useState(0);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
+
+  // Refs
+  const ffmpeg = useRef<any>(null);
+  const dirHandleRef = useRef<any>(null);
+  const activeStreamsRef = useRef<MediaStream[]>([]);
+  const chunks = useRef<{[key:string]: Blob[]}>({});
+
+  // Constants
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const bitsPerSecond = {
+    low: 2_000_000,
+    mid: 4_000_000,
+    best: 8_000_000,
+  };
+  const screenResolution = `${Math.floor(window.screen.width * window.devicePixelRatio)}x${Math.floor(window.screen.height * window.devicePixelRatio)}`;
+  const screenResolutions = [`Max (${screenResolution})`, "1080p", "720p"];
+
+  // Download helper function
   const handleDownload = (blobOrChunks: Blob[] | Blob, fileName: string, deviceName?: string) => {
     let blob: Blob;
     if (Array.isArray(blobOrChunks)) {
@@ -67,7 +122,6 @@ function App() {
       setTimeout(() => {
         URL.revokeObjectURL(link.href);
       }, 1000);
-      // Delay status update by 5 seconds to simulate confirmation
       setTimeout(() => {
         if (deviceName) {
           setSavedStatus(prev => ({ ...prev, [deviceName]: true }));
@@ -77,14 +131,8 @@ function App() {
       console.error("Download failed:", error);
     }
   };
-  // Track saved status for each device (screen, camera, mic)
-  const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
-  // Mobile device detection
-  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  // Permission status state
-  const [permissionStatus, setPermissionStatus] = useState<Record<string, string>>({});
 
-  // Helper function to check permission status for camera and microphone
+  // Check permissions
   const checkPermissions = async () => {
     const types = ['camera', 'microphone'];
     const statuses: Record<string, string> = {};
@@ -98,20 +146,15 @@ function App() {
     }
     setPermissionStatus(statuses);
   };
-  // Check permission status on mount
-  useEffect(() => {
-    checkPermissions();
-    // eslint-disable-next-line
-  }, []);
 
-  // Manual permission retry function
+  // Retry permissions
   const retryPermissions = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
       });
-      stream.getTracks().forEach(track => track.stop()); // Stop immediately
+      stream.getTracks().forEach(track => track.stop());
       alert("Permissions granted. Please start recording again.");
       await checkPermissions();
     } catch (err: any) {
@@ -119,41 +162,8 @@ function App() {
       await checkPermissions();
     }
   };
-  const ffmpeg = useRef<any>(null);
-  const dirHandleRef = useRef<any>(null);
-  // Track all active media streams for cleanup
-  const activeStreamsRef = useRef<MediaStream[]>([]);
 
-  const [isConverting, setIsConverting] = useState(false);
-
-  // Video/audio quality options
-  const bitsPerSecond = {
-    low: 2_000_000,
-    mid: 4_000_000,
-    best: 8_000_000,
-  };
-
-  // --- Screen resolution label for UI ---
-  // Always use device's full physical resolution (device pixels)
-  const screenResolution = `${Math.floor(window.screen.width * window.devicePixelRatio)}x${Math.floor(window.screen.height * window.devicePixelRatio)}`;
-  // For dropdowns, use this for "Max" option
-  const screenResolutions = [`Max (${screenResolution})`, "1080p", "720p"];
-
-  // Example: availableScreenResolutions state (for future use)
-  const [availableScreenResolutions, setAvailableScreenResolutions] = useState<string[]>([]);
-  useEffect(() => {
-    const screenWidth = window.screen.width;
-    const screenHeight = window.screen.height;
-
-    setAvailableScreenResolutions([
-      `${screenWidth}x${screenHeight}`,
-      "1920x1080",
-      "1280x720",
-      "640x480",
-    ]);
-  }, []);
-
-  // Helper to load ffmpeg.wasm if not already loaded
+  // Load FFmpeg
   const loadFFmpeg = async () => {
     if (!ffmpeg.current) {
       const ffmpegModule = await import(/* @vite-ignore */ '@ffmpeg/ffmpeg');
@@ -166,148 +176,115 @@ function App() {
     }
   };
 
-  // Add state for quality, format, and resolution
-  const [audioQuality, setAudioQuality] = useState('best');
-  const [fileFormat, setFileFormat] = useState('webm');
-  const [videoResolution, setVideoResolution] = useState<'fullscreen' | '1080p' | '720p' | '480p' | '360p'>('fullscreen');
-  const [permissionError, setPermissionError] = useState<string | null>(null);
-  // Ensure selectedOption state is declared in the component body
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
-
-  const [recording, setRecording] = useState(false);
-  const [mediaRecorders, setMediaRecorders] = useState<{[key:string]: MediaRecorder | null}>({});
-  const [videoUrls, setVideoUrls] = useState<{[key:string]: string | null}>({});
-  const [audioUrls, setAudioUrls] = useState<{[key:string]: string | null}>({});
-  const chunks = useRef<{[key:string]: Blob[]}>({});
-
-  // Detect if getDisplayMedia is supported
-  const [supportsDisplayMedia, setSupportsDisplayMedia] = useState(true);
-  useEffect(() => {
-    setSupportsDisplayMedia(typeof (navigator.mediaDevices as any).getDisplayMedia === 'function');
-  }, []);
-
-  // Replace recordingMode with recordOptions
-  const [recordOptions, setRecordOptions] = useState({
-    screenIds: [] as string[],
-    cameraIds: [] as string[],
-    mic: false,
-    micIds: [] as string[],
-  });
-
-  // Camera/mic device detection state
-  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
-  const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
-  // State for selected camera (radio selection)
-  const [selectedCamera, setSelectedCamera] = useState<MediaDeviceInfo | null>(null);
-  // State for camera permission
-  const [cameraPermission, setCameraPermission] = useState<string>("unknown");
-  // Utility: get the full native screen resolution (physical pixels)
+  // Get full screen resolution label
   function getFullScreenResolutionLabel(): string {
     const width = Math.floor(window.screen.width * window.devicePixelRatio);
     const height = Math.floor(window.screen.height * window.devicePixelRatio);
     return `${width}x${height}`;
   }
-  // Detect full screen resolution (physical screen, not browser window)
-  const [fullScreenResolution, setFullScreenResolution] = useState<string>('');
-  useEffect(() => {
-    setFullScreenResolution(getFullScreenResolutionLabel());
-  }, []);
 
-  // Actual screen resolution in physical pixels (not CSS pixels)
-  const [actualScreenResolution, setActualScreenResolution] = useState("");
-  useEffect(() => {
-    const screenWidth = Math.floor(window.screen.width * window.devicePixelRatio);
-    const screenHeight = Math.floor(window.screen.height * window.devicePixelRatio);
-    setActualScreenResolution(`${screenWidth}x${screenHeight}`);
-  }, []);
-
-  // Placeholder for future multi-screen support, label updated below
-  // Now include width and height in the screenDevices state
-  const [screenDevices, setScreenDevices] = useState<{ deviceId: string; label?: string; width?: number; height?: number }[]>([]);
-  useEffect(() => {
-    // Set up the label to include the actual detected screen resolution
-    const width = window.screen.width;
-    const height = window.screen.height;
-    setScreenDevices([
-      {
-        deviceId: "main",
-        label: actualScreenResolution
-          ? `Screen (${actualScreenResolution})`
-          : "Screen (Detecting...)",
-        width,
-        height,
-      }
-    ]);
-  }, [actualScreenResolution]);
-
-  // Helper: get available devices and ensure labels
+  // Get available devices
   const getAvailableDevices = async () => {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    let videoDevices = devices.filter(device => device.kind === 'videoinput');
-    let audioDevices = devices.filter(device => device.kind === 'audioinput');
-    // Assign fallback labels for video devices if missing
-    videoDevices = videoDevices.map((device, idx) => {
-      if (!device.label || device.label.trim() === "") {
-        return {
-          ...device,
-          label: `Camera ${idx + 1}`
-        };
-      }
-      return device;
-    });
-    setCameraDevices(videoDevices);
-    setMicDevices(audioDevices);
-    // Remove default camera selection on load
-    // Do not setSelectedCamera(videoDevices[0]) automatically
-    // Reset all sub-device selections and parent checkboxes on device detection
-    setRecordOptions({
-      screenIds: [],
-      cameraIds: [],
-      mic: false,
-      micIds: [],
-    });
-  };
-  useEffect(() => {
-    getAvailableDevices();
-    // Check camera permission status
-    (async () => {
-      try {
-        const status = await navigator.permissions.query({ name: "camera" as PermissionName });
-        setCameraPermission(status.state);
-      } catch {
-        setCameraPermission("unknown");
-      }
-    })();
-    // eslint-disable-next-line
-  }, []);
+    try {
+      // First, request permissions to ensure we can see device labels
+      await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => {
+          stream.getTracks().forEach(track => track.stop());
+        })
+        .catch(() => {
+          // Silent catch - permissions might be denied
+        });
 
-  // Camera stream initialization with facingMode constraint
-  useEffect(() => {
-    // Example: initialize camera preview stream using cameraFacingMode
-    // (This is a placeholder; adapt as needed for your actual preview logic)
-    let cameraStream: MediaStream | null = null;
-    const cameraConstraints = {
-      video: { facingMode: cameraFacingMode }
-    };
-    async function initCamera() {
-      try {
-        cameraStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
-        // TODO: Attach cameraStream to a video element for preview if needed
-      } catch (err) {
-        // Handle error if desired
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      let videoDevices = devices.filter(device => device.kind === 'videoinput');
+      let audioDevices = devices.filter(device => device.kind === 'audioinput');
+      
+      // Enhanced camera labeling for mobile
+      videoDevices = videoDevices.map((device, idx) => {
+        let label = device.label;
+        
+        if (!label || label.trim() === "") {
+          const deviceIdLower = device.deviceId.toLowerCase();
+          if (deviceIdLower.includes('front') || deviceIdLower.includes('user')) {
+            label = `Front Camera`;
+          } else if (deviceIdLower.includes('back') || deviceIdLower.includes('environment')) {
+            label = `Rear Camera`;
+          } else {
+            label = `Camera ${idx + 1}`;
+          }
+        } else {
+          if (label.toLowerCase().includes('front') || label.toLowerCase().includes('facing user')) {
+            label = 'Front Camera';
+          } else if (label.toLowerCase().includes('back') || label.toLowerCase().includes('facing environment')) {
+            label = 'Rear Camera';
+          }
+        }
+        
+        return { ...device, label };
+      });
+      
+      setCameraDevices(videoDevices);
+      setMicDevices(audioDevices);
+      
+      // If on mobile and we have multiple cameras, set default to rear camera
+      if (isMobile && videoDevices.length > 1) {
+        const rearCamera = videoDevices.find(d => 
+          d.label.toLowerCase().includes('rear') || 
+          d.label.toLowerCase().includes('back')
+        );
+        if (rearCamera) {
+          setSelectedCamera(rearCamera);
+          setRecordOptions(prev => ({ ...prev, cameraIds: [rearCamera.deviceId] }));
+        }
+      }
+    } catch (error) {
+      console.error('Error enumerating devices:', error);
+    }
+  };
+
+  // Get recorder options
+  const getRecorderOptions = (hasVideo: boolean, hasAudio: boolean) => {
+    const { isSafari, isFirefox } = getBrowserInfo();
+    
+    const videoMimeTypes = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=h264,opus',
+      'video/webm',
+      'video/mp4'
+    ];
+    
+    const audioMimeTypes = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/aac'
+    ];
+    
+    let mimeType = '';
+    const mimeTypes = hasVideo ? videoMimeTypes : audioMimeTypes;
+    
+    for (const type of mimeTypes) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        mimeType = type;
+        break;
       }
     }
-    // Only run if camera preview is needed (not during actual recording)
-    // Uncomment the next line to enable camera preview initialization:
-    // initCamera();
-    return () => {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
-      }
+    
+    if (!mimeType) {
+      mimeType = hasVideo ? 'video/webm' : 'audio/webm';
+    }
+    
+    const options: MediaRecorderOptions = {
+      mimeType,
+      videoBitsPerSecond: hasVideo ? bitsPerSecond['best'] : undefined,
+      audioBitsPerSecond: hasAudio ? bitsPerSecond[audioQuality] : undefined,
     };
-  }, [cameraFacingMode]);
+    
+    return options;
+  };
 
-  // Helper to detect video orientation from a MediaStream
+  // Detect video orientation
   const detectVideoOrientation = (stream: MediaStream): 'portrait' | 'landscape' => {
     const videoTrack = stream.getVideoTracks()[0];
     const settings = videoTrack.getSettings();
@@ -317,39 +294,123 @@ function App() {
     return 'landscape';
   };
 
-  // Compute maxResolutionLabel based on detected screen resolution
-  // Use "4k" for height >= 2160, "1440p" for height >= 1440, otherwise fallback to "1080p", etc.
-  const [maxResolutionLabel, setMaxResolutionLabel] = useState("1080p");
-  useEffect(() => {
-    const width = window.screen.width;
-    const height = window.screen.height;
-    let label = "";
-    if (height >= 2160 || width >= 3840) {
-      label = "4k";
-    } else if (height >= 1440 || width >= 2560) {
-      label = "1440p";
-    } else if (height >= 1080 || width >= 1920) {
-      label = "1080p";
-    } else if (height >= 720 || width >= 1280) {
-      label = "720p";
-    } else if (height >= 480 || width >= 854) {
-      label = "480p";
-    } else if (height >= 360 || width >= 640) {
-      label = "360p";
-    } else {
-      label = `${width}x${height}`;
-    }
-    setMaxResolutionLabel(label);
-  }, [fullScreenResolution]);
+  // Format time
+  function formatTime(sec: number) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    else return `${m}:${s.toString().padStart(2, '0')}`;
+  }
 
+  // Format size
+  function formatSize(bytes: number) {
+    const mb = bytes / (1024 * 1024);
+    if (mb < 1 && mb > 0) {
+      return `${mb.toFixed(2)} MB`;
+    }
+    return `${Math.round(mb)} MB`;
+  }
+
+  // Calculate estimated size
+  function calculateEstimatedSize(seconds: number, options: {
+    hasVideo: boolean,
+    videoResolution: string,
+    hasAudio: boolean,
+    audioQuality: string
+  }): number {
+    let totalBitsPerSecond = 0;
+
+    if (options.hasVideo) {
+      switch (options.videoResolution) {
+        case '1080p':
+          totalBitsPerSecond += 1_500_000;
+          break;
+        case '720p':
+          totalBitsPerSecond += 1_000_000;
+          break;
+        case '480p':
+          totalBitsPerSecond += 600_000;
+          break;
+        case '360p':
+          totalBitsPerSecond += 400_000;
+          break;
+        default:
+          totalBitsPerSecond += 1_200_000;
+          break;
+      }
+    }
+
+    if (options.hasAudio) {
+      switch (options.audioQuality) {
+        case 'best':
+          totalBitsPerSecond += 128_000;
+          break;
+        case 'mid':
+          totalBitsPerSecond += 96_000;
+          break;
+        case 'low':
+          totalBitsPerSecond += 64_000;
+          break;
+      }
+    }
+
+    const bytesPerSecond = totalBitsPerSecond / 8;
+    return Math.round(bytesPerSecond * seconds);
+  }
+
+  // Calculate total recording size
+  function calculateTotalRecordingSize() {
+    let total = 0;
+    if (chunks.current) {
+      Object.values(chunks.current).forEach(arr => {
+        if (Array.isArray(arr)) {
+          total += arr.reduce((acc, chunk) => acc + (chunk.size || 0), 0);
+        }
+      });
+    }
+    return total;
+  }
+
+  // Cleanup recording
+  const cleanupRecording = () => {
+    console.log("Cleaning up recording...");
+
+    Object.keys(mediaRecorders).forEach(key => {
+      const recorder = mediaRecorders[key];
+      if (recorder && recorder.state === "recording") {
+        try {
+          recorder.stop();
+          console.log(`Stopped recorder ${key}`);
+        } catch (error) {
+          console.error(`Error stopping recorder ${key}:`, error);
+        }
+      }
+    });
+
+    activeStreamsRef.current.forEach((stream, idx) => {
+      stream.getTracks().forEach(track => {
+        try {
+          track.stop();
+          console.log(`Stopped ${track.kind} track from stream #${idx}`);
+        } catch (err) {
+          console.warn('Error stopping track:', err);
+        }
+      });
+    });
+    activeStreamsRef.current = [];
+
+    setMediaRecorders({});
+    setRecording(false);
+    setRecordingSize(0);
+  };
+
+  // Start recording
   const startRecording = async () => {
     try {
-      // First clean up any existing recording state
       cleanupRecording();
-      // Always clear activeStreamsRef on new start
       activeStreamsRef.current = [];
       
-      // Helper to get resolution constraints
       const getResolutionConstraints = () => {
         switch (videoResolution) {
           case '1080p':
@@ -366,7 +427,6 @@ function App() {
         }
       };
 
-      // Streams to record
       const streams: {[key:string]: MediaStream} = {};
       const streamKeys: string[] = [];
 
@@ -376,51 +436,12 @@ function App() {
           streams.screen = await (navigator.mediaDevices as any).getDisplayMedia({
             video: getResolutionConstraints(),
           });
-          // Track this stream for cleanup
           activeStreamsRef.current.push(streams.screen);
           streamKeys.push('screen');
         } catch (err: any) {
           setPermissionError('Could not get screen stream.\nError: ' + (err?.message || err));
           cleanupRecording();
           return;
-        }
-      }
-
-      // Get camera streams if selected
-      if (recordOptions.cameraIds && recordOptions.cameraIds.length > 0) {
-        for (const camId of recordOptions.cameraIds) {
-          try {
-            const cameraConstraints = {
-              video: { deviceId: { exact: camId }, facingMode: cameraFacingMode }
-            };
-            const camStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
-            streams['camera_' + camId] = camStream;
-            // Track this stream for cleanup
-            activeStreamsRef.current.push(camStream);
-            streamKeys.push('camera_' + camId);
-          } catch (err: any) {
-            if (err.name === 'OverconstrainedError') {
-              try {
-                const cameraConstraints = {
-                  video: { facingMode: cameraFacingMode }
-                };
-                const fallbackStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
-                setPermissionError('Selected camera device is not available or does not support required constraints. Falling back to default camera.');
-                streams['camera_' + camId] = fallbackStream;
-                // Track fallback stream for cleanup
-                activeStreamsRef.current.push(fallbackStream);
-                streamKeys.push('camera_' + camId);
-              } catch (fallbackErr: any) {
-                setPermissionError('Could not get any camera stream.\nError: ' + (fallbackErr?.message || fallbackErr));
-                cleanupRecording();
-                return;
-              }
-            } else {
-              setPermissionError('Could not get camera stream for device: ' + camId + '\nError: ' + (err?.message || err));
-              cleanupRecording();
-              return;
-            }
-          }
         }
       }
 
@@ -438,12 +459,10 @@ function App() {
               video: false,
             });
             micStreams['mic_' + micId] = micStream;
-            // Track this mic stream for cleanup
             activeStreamsRef.current.push(micStream);
           } catch (err: any) {
             try {
               await navigator.mediaDevices.getUserMedia({ audio: true });
-              // Retry with specific mic
               const micStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                   deviceId: { exact: micId },
@@ -453,10 +472,54 @@ function App() {
                 video: false,
               });
               micStreams['mic_' + micId] = micStream;
-              // Track this mic stream for cleanup
               activeStreamsRef.current.push(micStream);
             } catch (finalErr: any) {
               setPermissionError('Could not get microphone audio stream for device: ' + micId + '\nError: ' + (finalErr?.message || finalErr));
+              cleanupRecording();
+              return;
+            }
+          }
+        }
+      }
+
+      // Get camera streams if selected
+      if (recordOptions.cameraIds && recordOptions.cameraIds.length > 0) {
+        for (const camId of recordOptions.cameraIds) {
+          try {
+            const selectedDevice = cameraDevices.find(d => d.deviceId === camId);
+            const isRearCamera = selectedDevice?.label.toLowerCase().includes('rear') || 
+                                selectedDevice?.label.toLowerCase().includes('back');
+            
+            const cameraConstraints: MediaStreamConstraints = {
+              video: {
+                deviceId: { exact: camId },
+                ...(isMobile && {
+                  facingMode: isRearCamera ? 'environment' : 'user',
+                  width: { ideal: 1920 },
+                  height: { ideal: 1080 }
+                })
+              }
+            };
+            
+            const camStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
+            streams['camera_' + camId] = camStream;
+            activeStreamsRef.current.push(camStream);
+            streamKeys.push('camera_' + camId);
+          } catch (err: any) {
+            try {
+              const fallbackConstraints: MediaStreamConstraints = {
+                video: {
+                  facingMode: 'user',
+                  width: { ideal: 1920 },
+                  height: { ideal: 1080 }
+                }
+              };
+              const fallbackStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+              streams['camera_' + camId] = fallbackStream;
+              activeStreamsRef.current.push(fallbackStream);
+              streamKeys.push('camera_' + camId);
+            } catch (fallbackErr: any) {
+              setPermissionError('Could not access camera: ' + (fallbackErr?.message || fallbackErr));
               cleanupRecording();
               return;
             }
@@ -491,19 +554,11 @@ function App() {
             ...audioTracks,
           ]);
           finalStream = combinedStream;
-          // Track this combined stream for cleanup
           activeStreamsRef.current.push(combinedStream);
         }
-        const recorderOptions: MediaRecorderOptions = {
-          mimeType: 'video/webm',
-          videoBitsPerSecond: bitsPerSecond['best'],
-          audioBitsPerSecond: recordOptions.mic ? bitsPerSecond[audioQuality] : 0,
-        };
+        const recorderOptions = getRecorderOptions(true, recordOptions.mic);
         newChunks[camKey] = [];
-        const recorder = new MediaRecorder(finalStream, {
-          ...recorderOptions,
-          timeslice: 1000, // Get data every second
-        });
+        const recorder = new MediaRecorder(finalStream, recorderOptions);
         recorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) {
             newChunks[camKey].push(e.data);
@@ -516,10 +571,10 @@ function App() {
           setVideoUrls({ ...newVideoUrls });
         };
         newMediaRecorders[camKey] = recorder;
-        recorder.start(1000); // <-- Only here, not in a later loop
+        recorder.start(1000);
       }
 
-      // For each screen stream, combine with selected mics if enabled
+      // For screen stream
       if (recordOptions.screenIds.includes('main') && streams.screen) {
         let finalStream = streams.screen;
         if (recordOptions.mic && recordOptions.micIds && recordOptions.micIds.length > 0) {
@@ -531,16 +586,11 @@ function App() {
             ...audioTracks,
           ]);
           finalStream = combinedStream;
-          // Track this combined stream for cleanup
           activeStreamsRef.current.push(combinedStream);
         }
-        const recorderOptions: MediaRecorderOptions = {
-          mimeType: 'video/webm',
-          videoBitsPerSecond: bitsPerSecond['best'],
-          audioBitsPerSecond: recordOptions.mic ? bitsPerSecond[audioQuality] : 0,
-        };
+        const recorderOptions = getRecorderOptions(true, recordOptions.mic);
         newChunks['screen'] = [];
-        const recorder = new MediaRecorder(finalStream, recorderOptions); // Remove timeslice here
+        const recorder = new MediaRecorder(finalStream, recorderOptions);
         recorder.ondataavailable = (e) => {
           if (e.data.size > 0) {
             newChunks['screen'].push(e.data);
@@ -553,9 +603,8 @@ function App() {
           setVideoUrls({...newVideoUrls});
         };
         newMediaRecorders['screen'] = recorder;
-        recorder.start(1000); // <-- Only here, not in a later loop
-      } 
-
+        recorder.start(1000);
+      }
 
       // For each mic stream, record audio-only
       if (recordOptions.mic && recordOptions.micIds && recordOptions.micIds.length > 0) {
@@ -563,10 +612,7 @@ function App() {
           const micKey = 'mic_' + micId;
           const micStream = micStreams[micKey];
           if (!micStream) continue;
-          const recorderOptions: MediaRecorderOptions = {
-            mimeType: 'audio/webm',
-            audioBitsPerSecond: bitsPerSecond[audioQuality],
-          };
+          const recorderOptions = getRecorderOptions(false, true);
           newChunks[micKey] = [];
           const recorder = new MediaRecorder(micStream, recorderOptions);
           recorder.ondataavailable = (e) => {
@@ -580,7 +626,7 @@ function App() {
             setAudioUrls({...newAudioUrls});
           };
           newMediaRecorders[micKey] = recorder;
-          recorder.start(1000); // <-- Only here, not in a later loop
+          recorder.start(1000);
         }
       }
 
@@ -589,13 +635,13 @@ function App() {
       setRecording(true);
     } catch (err) {
       console.error('Recording error:', err);
-      cleanupRecording(); // Clean up on error
+      cleanupRecording();
       setPermissionError('Could not start recording: ' + err);
     }
   };
 
+  // Stop recording
   const stopRecording = () => {
-    // Reset saved status for all relevant device types (screen, camera, mic)
     if (recordOptions.screenIds.includes('main')) {
       setSavedStatus(prev => ({ ...prev, screen: false }));
     }
@@ -608,143 +654,172 @@ function App() {
     cleanupRecording();
   };
 
-  // UI feedback state for sharing/downloading
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-
-  // "Save As" handler using File System Access API or fallback, with mobile sharing
-  const saveFile = async (type: 'screen' | 'camera' | 'mic', isAudio: boolean) => {
-    const url = isAudio ? audioUrls[type] : videoUrls[type];
-    if (!url) return;
-
-    // Choose file extension and ffmpeg args based on desired format
-    let extension = 'webm';
-    let ffmpegArgs: string[] = [];
-    if (!isAudio) {
-      if (fileFormat === 'mp4') {
-        extension = 'mp4';
-        ffmpegArgs = ['-i', 'input.webm', '-c:v', 'copy', 'output.mp4'];
-      } else if (fileFormat === 'mov') {
-        extension = 'mov';
-        ffmpegArgs = ['-i', 'input.webm', '-c:v', 'copy', 'output.mov'];
-      } else {
-        extension = 'webm';
-      }
-    } else {
-      if (fileFormat === 'mp3') {
-        extension = 'mp3';
-        ffmpegArgs = ['-i', 'input.webm', '-q:a', '0', '-map', 'a', 'output.mp3'];
-      } else if (fileFormat === 'wav') {
-        extension = 'wav';
-        ffmpegArgs = ['-i', 'input.webm', '-map', 'a', 'output.wav'];
-      } else {
-        extension = 'webm';
-      }
-    }
-
-    let outUrl = url;
-    let filename = '';
-    if (isAudio) {
-      filename = 'audio.' + extension;
-    } else if (type === 'screen') {
-      filename = 'video.' + extension;
-    } else if (type === 'camera') {
-      const isMobileTemp = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      // Default to rear if we can't detect
-      filename = (isMobileTemp ? 'cam-rear' : 'cam') + '.' + extension;
-    }
-
-    let blob: Blob | null = null;
-    if (ffmpegArgs.length) {
-      setIsConverting(true);
-      await loadFFmpeg();
-
-      // Fetch the recorded blob as a file
-      blob = await fetch(url).then(r => r.blob());
-      const { fetchFile } = await import('@ffmpeg/ffmpeg');
-      ffmpeg.current.FS('writeFile', 'input.webm', await fetchFile(blob));
-
-      await ffmpeg.current.run(...ffmpegArgs);
-
-      const outName = ffmpegArgs[ffmpegArgs.length - 1];
-      const data = ffmpeg.current.FS('readFile', outName);
-
-      const convertedBlob = new Blob([data.buffer], {
-        type:
-          !isAudio
-            ? `video/${extension}`
-            : `audio/${extension}`,
-      });
-      outUrl = URL.createObjectURL(convertedBlob);
-      blob = convertedBlob;
-      setIsConverting(false);
-    } else {
-      blob = await fetch(url).then(r => r.blob());
-    }
-
-    // --- Mobile sharing logic ---
-    // Create file object for sharing
-    const file = new File([blob], filename, { type: blob.type });
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const shareSupported = !!navigator.canShare && navigator.canShare({ files: [file] });
-
-    if (isMobile && shareSupported) {
-      try {
-        await navigator.share({
-          title: filename,
-          text: 'Screen recording',
-          files: [file],
-        });
-        setSaveMessage('Video shared successfully!');
-        console.log('Video shared successfully');
-        return;
-      } catch (error) {
-        console.error('Sharing failed, falling back to download:', error);
-        // If sharing fails, continue to download fallback
-      }
-    }
-
-    // @ts-ignore
-    if (window.showSaveFilePicker) {
-      try {
-        // @ts-ignore
-        const handle = await window.showSaveFilePicker({
-          suggestedName: filename,
-          types: [
-            {
-              description:
-                !isAudio ? 'Video File' : 'Audio File',
-              accept: {
-                [!isAudio
-                  ? `video/${extension}`
-                  : `audio/${extension}`]: [`.${extension}`],
-              },
-            },
-          ],
-        });
-        const writable = await handle.createWritable();
-        await writable.write(blob);
-        await writable.close();
-        setSaveMessage('File saved!');
-      } catch (err) {
-        if (!(err instanceof DOMException && err.name === 'AbortError')) {
-          setSaveMessage('Error saving file: ' + err);
-        }
-      }
-    } else {
-      // Fallback: classic download
-      const a = document.createElement('a');
-      a.href = outUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setSaveMessage(
-        'Your browser does not support selecting a save folder, so file was saved to your Downloads folder.'
-      );
-    }
+  // Clear all handlers
+  const handleClearAll = () => {
+    setShowClearConfirmation(true);
   };
 
-  const [recordingTime, setRecordingTime] = useState(0);
+  const confirmClear = () => {
+    setRecordedChunks([]);
+    setVideoUrls({});
+    setAudioUrls({});
+    chunks.current = {};
+    setSavedStatus({});
+    setShowClearConfirmation(false);
+    setHasCleared(true);
+  };
+
+  const cancelClear = () => {
+    setShowClearConfirmation(false);
+  };
+
+  // Video preview component
+  const VideoPreview: React.FC<{ src: string; title: string }> = ({ src, title }) => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('landscape');
+    
+    useEffect(() => {
+      const video = videoRef.current;
+      if (!video) return;
+      
+      const handleLoadedMetadata = () => {
+        const { videoWidth, videoHeight } = video;
+        if (videoWidth && videoHeight) {
+          setOrientation(videoHeight > videoWidth ? 'portrait' : 'landscape');
+        }
+      };
+      
+      video.addEventListener('loadedmetadata', handleLoadedMetadata);
+      return () => {
+        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      };
+    }, [src]);
+    
+    return (
+      <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+        <h3>{title}</h3>
+        <video
+          ref={videoRef}
+          src={src}
+          controls
+          className={`video-preview ${orientation === 'portrait' ? 'portrait-video' : ''}`}
+          style={{
+            maxWidth: orientation === 'portrait' ? '300px' : '100%',
+            transform: 'none'
+          }}
+        />
+      </div>
+    );
+  };
+
+  // Browser notice component
+  const BrowserNotice: React.FC = () => {
+    const { isSafari, isFirefox, isIncognito } = getBrowserInfo();
+    
+    if (!isSafari && !isFirefox && !isIncognito) return null;
+    
+    return (
+      <div style={{
+        background: '#2a2a2a',
+        border: '1px solid #ff61f4',
+        borderRadius: '8px',
+        padding: '12px',
+        marginBottom: '20px',
+        fontSize: '0.9rem',
+        color: '#fff'
+      }}>
+        {isSafari && (
+          <p>📱 Safari detected: Screen recording is not supported. Camera and microphone recording available.</p>
+        )}
+        {isFirefox && (
+          <p>🦊 Firefox detected: Full support available. Grant permissions when prompted.</p>
+        )}
+        {isIncognito && (
+          <p>🕵️ Private browsing detected: Some features may be limited. Exit private mode for full functionality.</p>
+        )}
+      </div>
+    );
+  };
+
+  // Effects
+  useEffect(() => {
+    checkPermissions();
+  }, []);
+
+  useEffect(() => {
+    setSupportsDisplayMedia(typeof (navigator.mediaDevices as any).getDisplayMedia === 'function');
+  }, []);
+
+  useEffect(() => {
+    const screenWidth = window.screen.width;
+    const screenHeight = window.screen.height;
+    setAvailableScreenResolutions([
+      `${screenWidth}x${screenHeight}`,
+      "1920x1080",
+      "1280x720",
+      "640x480",
+    ]);
+  }, []);
+
+  useEffect(() => {
+    setFullScreenResolution(getFullScreenResolutionLabel());
+  }, []);
+
+  useEffect(() => {
+    const screenWidth = Math.floor(window.screen.width * window.devicePixelRatio);
+    const screenHeight = Math.floor(window.screen.height * window.devicePixelRatio);
+    setActualScreenResolution(`${screenWidth}x${screenHeight}`);
+  }, []);
+
+  useEffect(() => {
+    const width = window.screen.width;
+    const height = window.screen.height;
+    setScreenDevices([
+      {
+        deviceId: "main",
+        label: actualScreenResolution
+          ? `Screen (${actualScreenResolution})`
+          : "Screen (Detecting...)",
+        width,
+        height,
+      }
+    ]);
+  }, [actualScreenResolution]);
+
+  useEffect(() => {
+    getAvailableDevices();
+    (async () => {
+      try {
+        const status = await navigator.permissions.query({ name: "camera" as PermissionName });
+        setCameraPermission(status.state);
+      } catch {
+        setCameraPermission("unknown");
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    const width = window.screen.width;
+    const height = window.screen.height;
+    let label = "";
+    if (height >= 2160 || width >= 3840) {
+      label = "4k";
+    } else if (height >= 1440 || width >= 2560) {
+      label = "1440p";
+    } else if (height >= 1080 || width >= 1920) {
+      label = "1080p";
+    } else if (height >= 720 || width >= 1280) {
+      label = "720p";
+    } else if (height >= 480 || width >= 854) {
+      label = "480p";
+    } else if (height >= 360 || width >= 640) {
+      label = "360p";
+    } else {
+      label = `${width}x${height}`;
+    }
+    setMaxResolutionLabel(label);
+  }, [fullScreenResolution]);
+
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (recording) {
@@ -759,136 +834,7 @@ function App() {
     };
   }, [recording]);
 
-  function formatTime(sec: number) {
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    else return `${m}:${s.toString().padStart(2, '0')}`;
-  }
-
-  // Add with your other state declarations
-  const [recordingSize, setRecordingSize] = useState(0);
-
-  // Replace your formatSize function with this:
-  function formatSize(bytes: number) {
-    const mb = bytes / (1024 * 1024);
-    if (mb < 1 && mb > 0) {
-      return `${mb.toFixed(2)} MB`;
-    }
-    return `${Math.round(mb)} MB`;
-  }
-
-  // Add this helper function near your other format functions
-  function getFileSize(url: string | null): number {
-    if (!url) return 0;
-    const videoElement = document.createElement('video');
-    videoElement.src = url;
-    return videoElement.duration * (videoElement.videoWidth * videoElement.videoHeight * 3) / 8;
-  }
-
-  // (Optional) Adjust calculateEstimatedSize for more realistic webm bitrates:
-  function calculateEstimatedSize(seconds: number, options: {
-    hasVideo: boolean,
-    videoResolution: string,
-    hasAudio: boolean,
-    audioQuality: string
-  }): number {
-    let totalBitsPerSecond = 0;
-
-    // Use more typical MediaRecorder bitrates for webm/vp8
-    if (options.hasVideo) {
-      switch (options.videoResolution) {
-        case '1080p':
-          totalBitsPerSecond += 1_500_000; // 1.5 Mbps
-          break;
-        case '720p':
-          totalBitsPerSecond += 1_000_000; // 1 Mbps
-          break;
-        case '480p':
-          totalBitsPerSecond += 600_000; // 600 kbps
-          break;
-        case '360p':
-          totalBitsPerSecond += 400_000; // 400 kbps
-          break;
-        default: // fullscreen
-          totalBitsPerSecond += 1_200_000; // 1.2 Mbps
-          break;
-      }
-    }
-
-    // Audio bitrate (webm/opus is usually 64-128kbps)
-    if (options.hasAudio) {
-      switch (options.audioQuality) {
-        case 'best':
-          totalBitsPerSecond += 128_000;
-          break;
-        case 'mid':
-          totalBitsPerSecond += 96_000;
-          break;
-        case 'low':
-          totalBitsPerSecond += 64_000;
-          break;
-      }
-    }
-
-    const bytesPerSecond = totalBitsPerSecond / 8;
-    return Math.round(bytesPerSecond * seconds);
-  }
-
-  // Add this cleanup function at the top of your App component
-  const cleanupRecording = () => {
-    console.log("Cleaning up recording...");
-
-    // Stop each active recorder (only if its state is "recording")
-    Object.keys(mediaRecorders).forEach(key => {
-      const recorder = mediaRecorders[key];
-      if (recorder && recorder.state === "recording") {
-        try {
-          recorder.stop();
-          console.log(`Stopped recorder ${key}`);
-        } catch (error) {
-          console.error(`Error stopping recorder ${key}:`, error);
-        }
-      }
-    });
-
-    // Stop all tracks from all active streams
-    activeStreamsRef.current.forEach((stream, idx) => {
-      stream.getTracks().forEach(track => {
-        try {
-          track.stop();
-          console.log(`Stopped ${track.kind} track from stream #${idx}`);
-        } catch (err) {
-          console.warn('Error stopping track:', err);
-        }
-      });
-    });
-    activeStreamsRef.current = [];
-
-    // Reset state variables
-    setMediaRecorders({});
-    setRecording(false);
-    setRecordingSize(0);
-  };
-
-  function calculateTotalRecordingSize() {
-    let total = 0;
-    if (chunks.current) {
-      Object.values(chunks.current).forEach(arr => {
-        if (Array.isArray(arr)) {
-          total += arr.reduce((acc, chunk) => acc + (chunk.size || 0), 0);
-        }
-      });
-    }
-    return total;
-  }
-
-  // Add recordedChunks and handleClearAll for the Clear All button
-  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
-  // Populate recordedChunks whenever previews are available
   useEffect(() => {
-    // Gather all chunks from current previews
     let allChunks: Blob[] = [];
     if (chunks.current) {
       Object.values(chunks.current).forEach(arr => {
@@ -899,33 +845,17 @@ function App() {
     }
     setRecordedChunks(allChunks);
   }, [videoUrls, audioUrls]);
-  // Handler to clear all previews and chunks
-  const handleClearAll = () => {
-    setShowClearConfirmation(true);
-  };
-  // Confirm and cancel clear handlers for "Clear All" modal
-  const confirmClear = () => {
-    setRecordedChunks([]);
-    setVideoUrls({});
-    setAudioUrls({});
-    chunks.current = {};
-    setSavedStatus({});
-    setShowClearConfirmation(false);
-    setHasCleared(true);
-  };
-  const cancelClear = () => {
-    setShowClearConfirmation(false);
-  };
+
+  // Main render
   return (
     <div className="App">
-      {/* Main App Container */}
       <div className="App-header">
         <span className="header-subtitle" style={{ marginBottom: '10px' }}>100% vibe coded</span>
         <h1 className="header-title" style={{ marginTop: 0, marginBottom: '14px' }}>Screen Recorder App</h1>
         <p className="header-description" style={{ marginTop: '0', marginBottom: '18px' }}>
           Capture your devices with ease!
         </p>
-
+        <BrowserNotice />
         <div className="settings-row" style={{ margin: "0 auto", display: "flex", justifyContent: "center" }}>
           <div
             className="settings-grid"
@@ -938,23 +868,7 @@ function App() {
               maxWidth: "650px",
             }}
           >
-            {/* Options row */}
-            {/*
-            <div
-              className="settings-label"
-              style={{
-                minWidth: "110px",
-                width: "110px",
-                textAlign: "left",
-                display: "flex",
-                alignItems: "baseline"
-              }}
-            >
-              Options:
-            </div>
-            */}
             <div className="settings-control" style={{ flex: 1 }}>
-              {/* Centered options checkboxes */}
               <div className="display-center">
                 <div className="checkbox-group">
                   {/* Screen */}
@@ -974,74 +888,68 @@ function App() {
                         }}
                         className="styled-checkbox"
                       />
-                      {/* Show the label as just "Screen" */}
                       Screen
                     </label>
                     {recordOptions.screenIds.length > 0 && (
                       <div className="device-submenu">
-                        {/* Multi-screen dynamic rendering, mobile support */}
-                    {!isMobile ? (
-                      screenDevices.map((device, index) => {
-                        // Prefer width/height from device, fallback to parsing label, fallback to undefined
-                        let width: number | undefined = device.width, height: number | undefined = device.height;
-                        if ((width === undefined || height === undefined) && device.label) {
-                          const match = device.label.match(/(\d+)x(\d+)/);
-                          if (match) {
-                            width = parseInt(match[1], 10);
-                            height = parseInt(match[2], 10);
-                          }
-                        }
-                        // Compose the new label: always include resolution if available
-                        let label = "";
-                        if (device.label) {
-                          // Remove any existing "(WxH)" part from label
-                          label = device.label.replace(/\s*\(\d+x\d+\)/, "");
-                        } else {
-                          label = `Screen ${index + 1}`;
-                        }
-                        if (width && height) {
-                          label += ` (${width}x${height})`;
-                        }
-                        // Update: show actualScreenResolution in label if present
-                        if (device.deviceId === "main" && actualScreenResolution) {
-                          label = `Screen (${actualScreenResolution})`;
-                        }
-                        return (
-                          <label key={device.deviceId}>
-                            <input
-                              type="checkbox"
-                              checked={recordOptions.screenIds.includes(device.deviceId)}
-                              onChange={(e) => {
-                                let screenIds = [...recordOptions.screenIds];
-                                if (e.target.checked) {
-                                  if (!screenIds.includes(device.deviceId)) screenIds.push(device.deviceId);
-                                } else {
-                                  screenIds = screenIds.filter((id) => id !== device.deviceId);
-                                }
-                                setRecordOptions({ ...recordOptions, screenIds });
-                              }}
-                              className="styled-checkbox"
-                            />
-                            <span className="device-label">
-                              {label}
-                              {recordOptions.screenIds.includes(device.deviceId) && (
-                                <span
-                                  className={`device-permission ${
-                                    permissionStatus.screen === 'denied'
-                                      ? 'status-denied'
-                                      : permissionStatus.screen === 'granted'
-                                      ? 'status-granted'
-                                      : 'status-unknown'
-                                  }`}
-                                >
-                                  : {permissionStatus.screen || 'TBD'}
+                        {!isMobile ? (
+                          screenDevices.map((device, index) => {
+                            let width: number | undefined = device.width, height: number | undefined = device.height;
+                            if ((width === undefined || height === undefined) && device.label) {
+                              const match = device.label.match(/(\d+)x(\d+)/);
+                              if (match) {
+                                width = parseInt(match[1], 10);
+                                height = parseInt(match[2], 10);
+                              }
+                            }
+                            let label = "";
+                            if (device.label) {
+                              label = device.label.replace(/\s*\(\d+x\d+\)/, "");
+                            } else {
+                              label = `Screen ${index + 1}`;
+                            }
+                            if (width && height) {
+                              label += ` (${width}x${height})`;
+                            }
+                            if (device.deviceId === "main" && actualScreenResolution) {
+                              label = `Screen (${actualScreenResolution})`;
+                            }
+                            return (
+                              <label key={device.deviceId}>
+                                <input
+                                  type="checkbox"
+                                  checked={recordOptions.screenIds.includes(device.deviceId)}
+                                  onChange={(e) => {
+                                    let screenIds = [...recordOptions.screenIds];
+                                    if (e.target.checked) {
+                                      if (!screenIds.includes(device.deviceId)) screenIds.push(device.deviceId);
+                                    } else {
+                                      screenIds = screenIds.filter((id) => id !== device.deviceId);
+                                    }
+                                    setRecordOptions({ ...recordOptions, screenIds });
+                                  }}
+                                  className="styled-checkbox"
+                                />
+                                <span className="device-label">
+                                  {label}
+                                  {recordOptions.screenIds.includes(device.deviceId) && (
+                                    <span
+                                      className={`device-permission ${
+                                        permissionStatus.screen === 'denied'
+                                          ? 'status-denied'
+                                          : permissionStatus.screen === 'granted'
+                                          ? 'status-granted'
+                                          : 'status-unknown'
+                                      }`}
+                                    >
+                                      : {permissionStatus.screen || 'TBD'}
+                                    </span>
+                                  )}
                                 </span>
-                              )}
-                            </span>
-                          </label>
-                        );
-                      })
-                    ) : (
+                              </label>
+                            );
+                          })
+                        ) : (
                           <p style={{ color: '#bbb', fontSize: '0.85rem', marginTop: '0.5rem' }}>
                             Screen recording is not supported on mobile devices. Please try on desktop.
                           </p>
@@ -1110,11 +1018,6 @@ function App() {
                     )}
                   </div>
                   {/* Camera */}
-                  {/*
-                    Camera radio selection logic:
-                    - Only one camera can be selected at a time.
-                    - Render all camera devices as radio buttons inside the submenu.
-                  */}
                   <div className={`option-block${selectedCamera ? ' has-submenu' : ''}`}>
                     <label className="options-checkbox">
                       <input
@@ -1122,7 +1025,6 @@ function App() {
                         checked={!!selectedCamera}
                         onChange={e => {
                           if (e.target.checked) {
-                            // Default to first camera if none selected
                             if (cameraDevices.length > 0) {
                               setSelectedCamera(cameraDevices[0]);
                               setRecordOptions({ ...recordOptions, cameraIds: [cameraDevices[0].deviceId] });
@@ -1138,7 +1040,6 @@ function App() {
                     </label>
                     {selectedCamera && (
                       <div className="device-submenu">
-                        {/* Camera device selection as radio buttons */}
                         {cameraDevices.map((device) => (
                           <label key={device.deviceId} className="device-item">
                             <input
@@ -1163,10 +1064,9 @@ function App() {
           </div>
         </div>
 
-        {/* Centered settings group */}
+        {/* Settings */}
         <div className="settings-group">
           <div className="settings-grid">
-            {/* Dropdowns */}
             <div className="settings-row">
               <div className="settings-label">Audio:</div>
               <div className="settings-control">
@@ -1186,12 +1086,10 @@ function App() {
               <div className="settings-label">Resolution:</div>
               <div className="settings-control">
                 {(() => {
-                  // Build availableResolutions as per instructions
                   const availableResolutions = [
                     { label: "720p", width: 1280, height: 720, value: "720p" },
                     { label: "1080p", width: 1920, height: 1080, value: "1080p" },
                   ];
-                  // Use physical pixels for gating 1440p/4k
                   const physicalHeight = Math.floor(window.screen.height * window.devicePixelRatio);
                   if (physicalHeight >= 1440) {
                     availableResolutions.push({ label: "1440p", width: 2560, height: 1440, value: "1440p" });
@@ -1205,17 +1103,14 @@ function App() {
                     height: window.screen.height,
                     value: "fullscreen"
                   });
-                  // Always add 480p and 360p for compatibility
                   const extraResolutions = [
                     { label: "480p", width: 854, height: 480, value: "480p" },
                     { label: "360p", width: 640, height: 360, value: "360p" },
                   ];
-                  // Remove duplicates by value
                   const allResolutions = [
                     ...availableResolutions,
                     ...extraResolutions.filter(er => !availableResolutions.some(r => r.value === er.value)),
                   ];
-                  // For dropdown, "fullscreen" (Max) should be first, then descending order
                   const sortedResolutions = [
                     ...allResolutions.filter(r => r.value === "fullscreen"),
                     ...allResolutions.filter(r => r.value !== "fullscreen").sort((a, b) => b.height - a.height),
@@ -1241,24 +1136,15 @@ function App() {
         </div>
 
         <div className="action-buttons">
-          <button
-            className="btn"
-            onClick={startRecording}
-            disabled={recording}
-          >
+          <button className="btn" onClick={startRecording} disabled={recording}>
             Start Recording
           </button>
-          <button
-            className="neon-stop"
-            onClick={stopRecording}
-            disabled={!recording}
-          >
+          <button className="neon-stop" onClick={stopRecording} disabled={!recording}>
             Stop Recording
           </button>
         </div>
 
-
-        {/* Modal for permission error, after permission status */}
+        {/* Permission error modal */}
         {permissionError && (
           <div className="custom-modal">
             <div className="modal-content">
@@ -1310,6 +1196,7 @@ function App() {
           </>
         )}
 
+        {/* Previews */}
         <div className="preview-controls" style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
           {saveMessage && (
             <div className="save-toast" style={{
@@ -1339,12 +1226,7 @@ function App() {
           )}
           {recordOptions.screenIds.includes('main') && videoUrls.screen && (
             <div style={{marginBottom: '20px', textAlign: 'center'}}>
-              <h3>Screen Video</h3>
-              <video
-                src={videoUrls.screen}
-                controls
-                className="video-preview"
-              />
+              <VideoPreview src={videoUrls.screen} title="Screen Video" />
               <div className="save-button-container">
                 <button
                   className="neon-save"
@@ -1381,14 +1263,9 @@ function App() {
           )}
           {selectedCamera && videoUrls['camera_' + selectedCamera.deviceId] && (
             <div key={selectedCamera.deviceId} style={{marginBottom: '20px', textAlign: 'center'}}>
-              <h3>
-                Camera&nbsp;
-                {selectedCamera.label || `Camera ${selectedCamera.deviceId.slice(-4)}`}
-              </h3>
-              <video
-                src={videoUrls['camera_' + selectedCamera.deviceId] || undefined}
-                controls
-                className="video-preview"
+              <VideoPreview 
+                src={videoUrls['camera_' + selectedCamera.deviceId]} 
+                title={`Camera ${selectedCamera.label || `Camera ${selectedCamera.deviceId.slice(-4)}`}`}
               />
               <div className="save-button-container">
                 <button
@@ -1474,7 +1351,8 @@ function App() {
             ) : null
           )}
         </div>
-        {/* Updated Clear All button and modal logic */}
+        
+        {/* Clear All button */}
         {(recordedChunks.length > 0 || videoUrls.screen || Object.values(videoUrls).some(Boolean) || Object.values(audioUrls).some(Boolean)) && (
           <>
             <button
@@ -1513,49 +1391,6 @@ function App() {
       </div>
     </div>
   );
-}
-
-// Camera preview ref for orientation/rotation (MOVED TO TOP LEVEL)
-const cameraPreviewRef = React.createRef<HTMLVideoElement>();
-
-// Example function for starting camera recording with updated constraints and orientation detection
-// You may need to integrate this function as needed in your codebase
-async function startCameraRecording(selectedCamera: MediaDeviceInfo | null, recording: boolean) {
-  try {
-    const videoConstraints = {
-      deviceId: selectedCamera ? { exact: selectedCamera.deviceId } : undefined,
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
-      facingMode: "user",
-    };
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: videoConstraints,
-      audio: true,
-    });
-    // Attach stream to preview video element
-    if (cameraPreviewRef.current) {
-      cameraPreviewRef.current.srcObject = stream;
-      // Detect orientation and rotate accordingly
-      const videoTrack = stream.getVideoTracks()[0];
-      const settings = videoTrack.getSettings();
-      if (settings.width && settings.height) {
-        cameraPreviewRef.current.style.transform =
-          settings.height > settings.width ? "rotate(0deg)" : "rotate(90deg)";
-      }
-    }
-    // ...the rest of your camera recording logic here...
-  } catch (err) {
-    console.error('Error starting camera recording:', err);
-  }
-}
-
-// Reset transform on preview clear or recording stop (MOVED TO TOP LEVEL)
-function useResetCameraPreviewTransform(recording: boolean) {
-  useEffect(() => {
-    if (!recording && cameraPreviewRef.current) {
-      cameraPreviewRef.current.style.transform = "";
-    }
-  }, [recording]);
 }
 
 export default App;
