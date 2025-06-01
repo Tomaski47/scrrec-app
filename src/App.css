@@ -460,7 +460,9 @@ button:disabled {
 .video-preview {
   width: 100%;
   max-width: 500px;
-  aspect-ratio: 16 / 9;
+  height: auto;
+  max-height: 80vh;
+  aspect-ratio: auto;
   margin: 22px 0 16px 0;
   border-radius: 16px;
   box-shadow: 0 4px 32px 0 rgba(58, 227, 222, 0.23), 0 1.5px 16px 0 rgba(255, 97, 244, 0.11);
@@ -468,6 +470,20 @@ button:disabled {
   object-fit: contain;
   display: block;
   border: 2.5px solid #3ae3de;
+}
+
+@media (max-width: 700px) {
+  .video-preview {
+    max-width: 97vw;
+    max-height: 60vh;
+  }
+}
+
+@media (min-aspect-ratio: 7/10) {
+  /* For tall/vertical videos, limit width more on large screens */
+  .video-preview {
+    max-width: 340px;
+  }
 }
 
 .controls-row {
@@ -747,14 +763,27 @@ select {
   z-index: 9999;
 }
 
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
 .modal-content {
-  background: #111;
-  color: #fff;
-  padding: 24px 32px;
-  border-radius: 12px;
+  background-color: #111;
+  padding: 24px;
+  border-radius: 10px;
+  box-shadow: 0 0 20px rgba(255, 105, 180, 0.7);
+  color: white;
   text-align: center;
-  max-width: 420px;
-  box-shadow: 0 0 18px #beadff44, 0 0 36px #3ae3de33;
+  font-size: 1.1rem;
 }
 /* Inline permission status for submenu headings */
 .device-submenu .submenu-permission-status {
@@ -840,4 +869,174 @@ select {
   .device-submenu {
     margin-left: 24px;
   }
+}
+/* Clear All button styling */
+button.clear-all-button {
+  background: linear-gradient(90deg, #ff61f4 0%, #ff2c6d 100%) !important;
+  box-shadow: 0 0 12px #ff61f4aa, 0 0 36px #ff2c6daa;
+  color: #ffffff;
+  font-weight: 800;
+  text-shadow: 0 1px 2px #000;
+  border: none;
+  border-radius: 12px;
+  font-size: 1.05rem;
+  padding: 12px 24px;
+  margin-top: 28px;
+  cursor: pointer;
+  transition: transform 0.13s ease, box-shadow 0.2s ease;
+}
+
+button.clear-all-button:hover {
+  background: linear-gradient(90deg, #ff2c6d 0%, #ff61f4 100%) !important;
+  box-shadow: 0 0 32px #ff61f4dd, 0 0 40px #ff2c6ddd;
+  transform: scale(1.03);
+}
+
+/* Confirmation popup styling */
+/* Updated confirmation-modal styling to match neon pink/purple modal styling */
+.confirmation-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 99999;
+}
+
+.confirmation-modal .modal-box {
+  background-color: #111;
+  padding: 24px;
+  border-radius: 10px;
+  box-shadow: 0 0 20px rgba(255, 105, 180, 0.7);
+  color: white;
+  text-align: center;
+  font-size: 1.1rem;
+}
+
+.confirmation-modal .modal-box p {
+  margin-bottom: 16px;
+}
+
+.confirmation-modal .modal-box .modal-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  gap: 20px;
+}
+
+.confirmation-modal .confirm-button,
+.confirmation-modal .cancel-button {
+  padding: 8px 16px;
+  margin: 0 8px;
+  border-radius: 6px;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.confirmation-modal .confirm-button {
+  background-color: #ff69b4;
+  color: white;
+}
+
+.confirmation-modal .confirm-button:hover {
+  background-color: #e055a2;
+}
+
+.confirmation-modal .cancel-button {
+  background-color: #333;
+  color: white;
+}
+
+.confirmation-modal .cancel-button:hover {
+  background-color: #555;
+}
+/* Confirmation popup with pink/purple visual theme */
+.confirm-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.confirm-modal-content {
+  background-color: #111;
+  padding: 24px;
+  border-radius: 10px;
+  box-shadow: 0 0 20px rgba(255, 105, 180, 0.7);
+  color: white;
+  text-align: center;
+  font-size: 1.1rem;
+}
+
+.confirm-modal-content p {
+  margin-bottom: 16px;
+}
+
+.confirm-button,
+.cancel-button {
+  padding: 8px 16px;
+  margin: 0 8px;
+  border-radius: 6px;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.confirm-button {
+  background-color: #ff69b4;
+  color: white;
+}
+
+.confirm-button:hover {
+  background-color: #e055a2;
+}
+
+.cancel-button {
+  background-color: #333;
+  color: white;
+}
+
+.cancel-button:hover {
+  background-color: #555;
+}
+/* Popup button styles (matches confirm/cancel button theme) */
+.popup-button {
+  padding: 8px 16px;
+  margin: 0 8px;
+  border-radius: 6px;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.popup-button.confirm {
+  background-color: #ff69b4;
+  color: white;
+}
+
+.popup-button.confirm:hover {
+  background-color: #e055a2;
+}
+
+.popup-button.cancel {
+  background-color: #333;
+  color: white;
+}
+
+.popup-button.cancel:hover {
+  background-color: #555;
 }

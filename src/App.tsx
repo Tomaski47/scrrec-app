@@ -46,6 +46,11 @@ const generateFilename = (streamType: string, resolution?: string): string => {
 
 
 function App() {
+  // Camera facing mode selection state (user = front, environment = rear)
+  const [cameraFacingMode, setCameraFacingMode] = useState<"user" | "environment">("user");
+  // -- BEGIN: Top-level state for "Clear All" modal --
+  const [showClearConfirmation, setShowClearConfirmation] = useState(false);
+  const [hasCleared, setHasCleared] = useState(false);
   // Download helper function for blobs (video/audio)
   const handleDownload = (blobOrChunks: Blob[] | Blob, fileName: string, deviceName?: string) => {
     let blob: Blob;
@@ -54,16 +59,22 @@ function App() {
     } else {
       blob = blobOrChunks;
     }
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = fileName;
-    link.click();
-    setTimeout(() => {
-      URL.revokeObjectURL(link.href);
-    }, 1000);
-    // Set saved status if deviceName is provided
-    if (deviceName) {
-      setSavedStatus(prev => ({ ...prev, [deviceName]: true }));
+    try {
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      link.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(link.href);
+      }, 1000);
+      // Delay status update by 5 seconds to simulate confirmation
+      setTimeout(() => {
+        if (deviceName) {
+          setSavedStatus(prev => ({ ...prev, [deviceName]: true }));
+        }
+      }, 2500);
+    } catch (error) {
+      console.error("Download failed:", error);
     }
   };
   // Track saved status for each device (screen, camera, mic)
@@ -241,6 +252,42 @@ function App() {
     });
   }, []);
 
+  // Camera stream initialization with facingMode constraint
+  useEffect(() => {
+    // Example: initialize camera preview stream using cameraFacingMode
+    // (This is a placeholder; adapt as needed for your actual preview logic)
+    let cameraStream: MediaStream | null = null;
+    const cameraConstraints = {
+      video: { facingMode: cameraFacingMode }
+    };
+    async function initCamera() {
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
+        // TODO: Attach cameraStream to a video element for preview if needed
+      } catch (err) {
+        // Handle error if desired
+      }
+    }
+    // Only run if camera preview is needed (not during actual recording)
+    // Uncomment the next line to enable camera preview initialization:
+    // initCamera();
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [cameraFacingMode]);
+
+  // Helper to detect video orientation from a MediaStream
+  const detectVideoOrientation = (stream: MediaStream): 'portrait' | 'landscape' => {
+    const videoTrack = stream.getVideoTracks()[0];
+    const settings = videoTrack.getSettings();
+    if (settings.width && settings.height) {
+      return settings.height > settings.width ? 'portrait' : 'landscape';
+    }
+    return 'landscape';
+  };
+
   // Compute maxResolutionLabel based on detected screen resolution
   // Use "4k" for height >= 2160, "1440p" for height >= 1440, otherwise fallback to "1080p", etc.
   const [maxResolutionLabel, setMaxResolutionLabel] = useState("1080p");
@@ -314,10 +361,10 @@ function App() {
       if (recordOptions.cameraIds && recordOptions.cameraIds.length > 0) {
         for (const camId of recordOptions.cameraIds) {
           try {
-            const camStream = await navigator.mediaDevices.getUserMedia({
-              video: { deviceId: { exact: camId } },
-              audio: false,
-            });
+            const cameraConstraints = {
+              video: { deviceId: { exact: camId }, facingMode: cameraFacingMode }
+            };
+            const camStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
             streams['camera_' + camId] = camStream;
             // Track this stream for cleanup
             activeStreamsRef.current.push(camStream);
@@ -325,7 +372,10 @@ function App() {
           } catch (err: any) {
             if (err.name === 'OverconstrainedError') {
               try {
-                const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const cameraConstraints = {
+                  video: { facingMode: cameraFacingMode }
+                };
+                const fallbackStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
                 setPermissionError('Selected camera device is not available or does not support required constraints. Falling back to default camera.');
                 streams['camera_' + camId] = fallbackStream;
                 // Track fallback stream for cleanup
@@ -805,6 +855,38 @@ function App() {
     return total;
   }
 
+  // Add recordedChunks and handleClearAll for the Clear All button
+  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
+  // Populate recordedChunks whenever previews are available
+  useEffect(() => {
+    // Gather all chunks from current previews
+    let allChunks: Blob[] = [];
+    if (chunks.current) {
+      Object.values(chunks.current).forEach(arr => {
+        if (Array.isArray(arr)) {
+          allChunks = allChunks.concat(arr);
+        }
+      });
+    }
+    setRecordedChunks(allChunks);
+  }, [videoUrls, audioUrls]);
+  // Handler to clear all previews and chunks
+  const handleClearAll = () => {
+    setShowClearConfirmation(true);
+  };
+  // Confirm and cancel clear handlers for "Clear All" modal
+  const confirmClear = () => {
+    setRecordedChunks([]);
+    setVideoUrls({});
+    setAudioUrls({});
+    chunks.current = {};
+    setSavedStatus({});
+    setShowClearConfirmation(false);
+    setHasCleared(true);
+  };
+  const cancelClear = () => {
+    setShowClearConfirmation(false);
+  };
   return (
     <div className="App">
       {/* Main App Container */}
@@ -1163,13 +1245,25 @@ function App() {
         {permissionError && (
           <div className="custom-modal">
             <div className="modal-content">
-              <p style={{ whiteSpace: "pre-line" }}>{permissionError}</p>
-              <button onClick={retryPermissions} className="btn" style={{ marginRight: "8px" }}>
-                Retry Permissions
-              </button>
-              <button onClick={() => setPermissionError(null)} className="btn neon-stop">
-                Resume
-              </button>
+              <p style={{ whiteSpace: "pre-line" }}>
+                {permissionError === "No recording options selected."
+                  ? "Please select a recording device."
+                  : permissionError}
+              </p>
+              {permissionError === "No recording options selected." ? (
+                <button onClick={() => setPermissionError(null)} className="btn neon-stop">
+                  OK
+                </button>
+              ) : (
+                <>
+                  <button onClick={retryPermissions} className="btn" style={{ marginRight: "8px" }}>
+                    Retry Permissions
+                  </button>
+                  <button onClick={() => setPermissionError(null)} className="btn neon-stop">
+                    Resume
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1366,6 +1460,28 @@ function App() {
             ) : null
           )}
         </div>
+        {/* Updated Clear All button and modal logic */}
+        {(recordedChunks.length > 0 || videoUrls.screen || Object.values(videoUrls).some(Boolean) || Object.values(audioUrls).some(Boolean)) && (
+          <>
+            <button
+              className="clear-button"
+              onClick={handleClearAll}
+            >
+              Clear All
+            </button>
+            {showClearConfirmation && (
+              <div className="modal">
+                <div className="modal-content">
+                  <p>Are you sure you want to delete current recordings?</p>
+                  <div className="popup-buttons">
+                    <button className="popup-button confirm" onClick={confirmClear}>Yes</button>
+                    <button className="popup-button cancel" onClick={cancelClear}>No</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <div className="app-footer">
@@ -1386,3 +1502,22 @@ function App() {
 }
 
 export default App;
+  // Example function for starting camera recording with updated constraints and orientation detection
+  // You may need to integrate this function as needed in your codebase
+  const startCameraRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: cameraFacingMode,
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: true,
+      });
+      const orientation = detectVideoOrientation(stream);
+      console.log('Video orientation:', orientation);
+      // ...the rest of your camera recording logic here...
+    } catch (err) {
+      console.error('Error starting camera recording:', err);
+    }
+  };
