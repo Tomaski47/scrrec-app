@@ -11,13 +11,14 @@ const getDeviceResolution = () => {
 // Utility function to detect browser type
 const getBrowserInfo = () => {
   const ua = navigator.userAgent;
-  const isChrome = /Chrome/.test(ua) && /Google Inc/.test(navigator.vendor);
-  const isSafari = /Safari/.test(ua) && /Apple Computer/.test(navigator.vendor);
+  const isChrome = /Chrome/.test(ua) && /Google Inc/.test(navigator.vendor) && !/OPR/.test(ua) && !/Edge/.test(ua);
+  const isSafari = /Safari/.test(ua) && /Apple Computer/.test(navigator.vendor) && !/Chrome/.test(ua) && !/CriOS/.test(ua);
   const isFirefox = /Firefox/.test(ua);
   const isEdge = /Edg/.test(ua);
   const isIncognito = !navigator.storage || !navigator.storage.estimate;
+  const isMobileSafari = /Safari/.test(ua) && /iPhone|iPad|iPod/.test(ua) && !/Chrome/.test(ua) && !/CriOS/.test(ua);
   
-  return { isChrome, isSafari, isFirefox, isEdge, isIncognito };
+  return { isChrome, isSafari, isFirefox, isEdge, isIncognito, isMobileSafari };
 };
 
 // Utility function to generate a filename for recordings
@@ -41,7 +42,6 @@ const generateFilename = (streamType: string, resolution?: string): string => {
   } else if (streamType === "mic") {
     deviceName = "mic";
   } else if (streamType === "screen") {
-    // Use improved logic for screen filename with resolution
     const selectedResolution = resolution;
     const resolutionPart = selectedResolution && selectedResolution !== "fullscreen"
       ? selectedResolution.toLowerCase()
@@ -53,7 +53,49 @@ const generateFilename = (streamType: string, resolution?: string): string => {
   return `${deviceName}_${formattedDate}_${formattedTime}.webm`;
 };
 
+// Get camera capabilities
+const getCameraCapabilities = async (deviceId: string): Promise<string[]> => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: { exact: deviceId } }
+    });
+    const track = stream.getVideoTracks()[0];
+    const capabilities = track.getCapabilities ? track.getCapabilities() : null;
+    track.stop();
+    
+    if (capabilities && capabilities.width && capabilities.height) {
+      const maxWidth = capabilities.width.max;
+      const maxHeight = capabilities.height.max;
+      const resolutions = [];
+      
+      // Common resolutions to check
+      const commonResolutions = [
+        { width: 3840, height: 2160, label: "4K" },
+        { width: 2560, height: 1440, label: "1440p" },
+        { width: 1920, height: 1080, label: "1080p" },
+        { width: 1280, height: 720, label: "720p" },
+        { width: 854, height: 480, label: "480p" },
+        { width: 640, height: 360, label: "360p" }
+      ];
+      
+      for (const res of commonResolutions) {
+        if (res.width <= maxWidth && res.height <= maxHeight) {
+          resolutions.push(res.label);
+        }
+      }
+      
+      return resolutions;
+    }
+    return ["1080p", "720p", "480p"];
+  } catch (err) {
+    return ["1080p", "720p", "480p"];
+  }
+};
+
 function App() {
+  // Dark mode state
+  const [darkMode, setDarkMode] = useState(true);
+  
   // State declarations
   const [showClearConfirmation, setShowClearConfirmation] = useState(false);
   const [hasCleared, setHasCleared] = useState(false);
@@ -63,8 +105,9 @@ function App() {
   const [audioQuality, setAudioQuality] = useState('best');
   const [fileFormat, setFileFormat] = useState('webm');
   const [videoResolution, setVideoResolution] = useState<'fullscreen' | '1080p' | '720p' | '480p' | '360p'>('fullscreen');
+  const [cameraResolutions, setCameraResolutions] = useState<{[deviceId: string]: string}>({});
+  const [availableCameraResolutions, setAvailableCameraResolutions] = useState<{[deviceId: string]: string[]}>({});
   const [permissionError, setPermissionError] = useState<string | null>(null);
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [mediaRecorders, setMediaRecorders] = useState<{[key:string]: MediaRecorder | null}>({});
   const [videoUrls, setVideoUrls] = useState<{[key:string]: string | null}>({});
@@ -78,7 +121,6 @@ function App() {
   });
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedCamera, setSelectedCamera] = useState<MediaDeviceInfo | null>(null);
   const [cameraPermission, setCameraPermission] = useState<string>("unknown");
   const [fullScreenResolution, setFullScreenResolution] = useState<string>('');
   const [actualScreenResolution, setActualScreenResolution] = useState("");
@@ -89,12 +131,13 @@ function App() {
   const [recordingSize, setRecordingSize] = useState(0);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
+  const [hasRequestedPermissions, setHasRequestedPermissions] = useState(false);
 
   // Refs
   const ffmpeg = useRef<any>(null);
-  const dirHandleRef = useRef<any>(null);
   const activeStreamsRef = useRef<MediaStream[]>([]);
   const chunks = useRef<{[key:string]: Blob[]}>({});
+  const clearConfirmationRef = useRef<HTMLDivElement>(null);
 
   // Constants
   const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -103,8 +146,22 @@ function App() {
     mid: 4_000_000,
     best: 8_000_000,
   };
-  const screenResolution = `${Math.floor(window.screen.width * window.devicePixelRatio)}x${Math.floor(window.screen.height * window.devicePixelRatio)}`;
-  const screenResolutions = [`Max (${screenResolution})`, "1080p", "720p"];
+
+  // Update document title
+  useEffect(() => {
+    document.title = "Si Recorder";
+  }, []);
+
+  // Apply dark mode class to body
+  useEffect(() => {
+    if (darkMode) {
+      document.body.classList.add('dark-mode');
+      document.body.classList.remove('light-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+      document.body.classList.add('light-mode');
+    }
+  }, [darkMode]);
 
   // Download helper function
   const handleDownload = (blobOrChunks: Blob[] | Blob, fileName: string, deviceName?: string) => {
@@ -132,7 +189,7 @@ function App() {
     }
   };
 
-  // Check permissions
+  // Check permissions without requesting
   const checkPermissions = async () => {
     const types = ['camera', 'microphone'];
     const statuses: Record<string, string> = {};
@@ -145,22 +202,6 @@ function App() {
       }
     }
     setPermissionStatus(statuses);
-  };
-
-  // Retry permissions
-  const retryPermissions = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-      stream.getTracks().forEach(track => track.stop());
-      alert("Permissions granted. Please start recording again.");
-      await checkPermissions();
-    } catch (err: any) {
-      alert("Still couldn't access camera or mic. Try restarting the browser or exiting incognito/guest mode.\n\nError: " + (err?.message || err));
-      await checkPermissions();
-    }
   };
 
   // Load FFmpeg
@@ -176,66 +217,106 @@ function App() {
     }
   };
 
-  // Get full screen resolution label
-  function getFullScreenResolutionLabel(): string {
-    const width = Math.floor(window.screen.width * window.devicePixelRatio);
-    const height = Math.floor(window.screen.height * window.devicePixelRatio);
-    return `${width}x${height}`;
-  }
-
-  // Get available devices
-  const getAvailableDevices = async () => {
+  // Get available devices without requesting permissions
+  const getAvailableDevices = async (requestPermissions = false) => {
     try {
-      // First, request permissions to ensure we can see device labels
-      await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .then(stream => {
+      if (requestPermissions && !hasRequestedPermissions) {
+        // Only request permissions when explicitly needed
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
           stream.getTracks().forEach(track => track.stop());
-        })
-        .catch(() => {
-          // Silent catch - permissions might be denied
-        });
+          setHasRequestedPermissions(true);
+        } catch (err) {
+          console.log('Permission denied or not available');
+        }
+      }
 
       const devices = await navigator.mediaDevices.enumerateDevices();
       let videoDevices = devices.filter(device => device.kind === 'videoinput');
       let audioDevices = devices.filter(device => device.kind === 'audioinput');
       
-      // Enhanced camera labeling for mobile
-      videoDevices = videoDevices.map((device, idx) => {
+      // Enhanced camera labeling
+      const cameraLabels = new Map<string, number>();
+      const frontCameras: MediaDeviceInfo[] = [];
+      const rearCameras: MediaDeviceInfo[] = [];
+      const unknownCameras: MediaDeviceInfo[] = [];
+      
+      videoDevices.forEach((device, idx) => {
         let label = device.label;
+        const deviceIdLower = device.deviceId.toLowerCase();
         
         if (!label || label.trim() === "") {
-          const deviceIdLower = device.deviceId.toLowerCase();
           if (deviceIdLower.includes('front') || deviceIdLower.includes('user')) {
             label = `Front Camera`;
+            frontCameras.push({ ...device, label });
           } else if (deviceIdLower.includes('back') || deviceIdLower.includes('environment')) {
             label = `Rear Camera`;
+            rearCameras.push({ ...device, label });
           } else {
             label = `Camera ${idx + 1}`;
+            unknownCameras.push({ ...device, label });
           }
         } else {
-          if (label.toLowerCase().includes('front') || label.toLowerCase().includes('facing user')) {
-            label = 'Front Camera';
-          } else if (label.toLowerCase().includes('back') || label.toLowerCase().includes('facing environment')) {
-            label = 'Rear Camera';
+          // Categorize based on existing labels
+          const labelLower = label.toLowerCase();
+          if (labelLower.includes('front') || labelLower.includes('facing user') || labelLower.includes('facetime')) {
+            frontCameras.push({ ...device, label: 'Front Camera' });
+          } else if (labelLower.includes('back') || labelLower.includes('rear') || labelLower.includes('facing environment')) {
+            rearCameras.push({ ...device, label: 'Rear Camera' });
+          } else {
+            unknownCameras.push(device);
           }
         }
-        
+      });
+      
+      // Number duplicate labels
+      const numberDuplicates = (cameras: MediaDeviceInfo[], baseLabel: string) => {
+        if (cameras.length > 1) {
+          return cameras.map((cam, idx) => ({
+            ...cam,
+            label: `${baseLabel} ${idx + 1}`
+          }));
+        }
+        return cameras;
+      };
+      
+      const numberedFront = numberDuplicates(frontCameras, 'Front Camera');
+      const numberedRear = numberDuplicates(rearCameras, 'Rear Camera');
+      
+      videoDevices = [...numberedFront, ...numberedRear, ...unknownCameras];
+      
+      // Enhanced microphone labeling
+      audioDevices = audioDevices.map((device, idx) => {
+        let label = device.label;
+        if (!label || label.trim() === "") {
+          label = `Microphone ${idx + 1}`;
+        } else {
+          // Try to identify front/rear mics
+          const labelLower = label.toLowerCase();
+          if (labelLower.includes('front') || labelLower.includes('bottom')) {
+            label = 'Front Microphone';
+          } else if (labelLower.includes('back') || labelLower.includes('rear') || labelLower.includes('top')) {
+            label = 'Rear Microphone';
+          }
+        }
         return { ...device, label };
       });
       
       setCameraDevices(videoDevices);
       setMicDevices(audioDevices);
       
-      // If on mobile and we have multiple cameras, set default to rear camera
-      if (isMobile && videoDevices.length > 1) {
-        const rearCamera = videoDevices.find(d => 
-          d.label.toLowerCase().includes('rear') || 
-          d.label.toLowerCase().includes('back')
-        );
-        if (rearCamera) {
-          setSelectedCamera(rearCamera);
-          setRecordOptions(prev => ({ ...prev, cameraIds: [rearCamera.deviceId] }));
-        }
+      // Get camera resolutions for each device
+      for (const camera of videoDevices) {
+        const resolutions = await getCameraCapabilities(camera.deviceId);
+        setAvailableCameraResolutions(prev => ({
+          ...prev,
+          [camera.deviceId]: resolutions
+        }));
+        // Set default resolution
+        setCameraResolutions(prev => ({
+          ...prev,
+          [camera.deviceId]: resolutions[0] || '1080p'
+        }));
       }
     } catch (error) {
       console.error('Error enumerating devices:', error);
@@ -282,16 +363,6 @@ function App() {
     };
     
     return options;
-  };
-
-  // Detect video orientation
-  const detectVideoOrientation = (stream: MediaStream): 'portrait' | 'landscape' => {
-    const videoTrack = stream.getVideoTracks()[0];
-    const settings = videoTrack.getSettings();
-    if (settings.width && settings.height) {
-      return settings.height > settings.width ? 'portrait' : 'landscape';
-    }
-    return 'landscape';
   };
 
   // Format time
@@ -400,14 +471,63 @@ function App() {
     });
     activeStreamsRef.current = [];
 
+    // Clean up old video URLs to free memory
+    Object.values(videoUrls).forEach(url => {
+      if (url) URL.revokeObjectURL(url);
+    });
+    Object.values(audioUrls).forEach(url => {
+      if (url) URL.revokeObjectURL(url);
+    });
+
     setMediaRecorders({});
     setRecording(false);
     setRecordingSize(0);
   };
 
+  // Get camera constraints based on resolution
+  const getCameraConstraints = (deviceId: string, resolution: string) => {
+    const constraints: any = {
+      deviceId: { exact: deviceId }
+    };
+    
+    switch (resolution) {
+      case '4K':
+        constraints.width = { ideal: 3840 };
+        constraints.height = { ideal: 2160 };
+        break;
+      case '1440p':
+        constraints.width = { ideal: 2560 };
+        constraints.height = { ideal: 1440 };
+        break;
+      case '1080p':
+        constraints.width = { ideal: 1920 };
+        constraints.height = { ideal: 1080 };
+        break;
+      case '720p':
+        constraints.width = { ideal: 1280 };
+        constraints.height = { ideal: 720 };
+        break;
+      case '480p':
+        constraints.width = { ideal: 854 };
+        constraints.height = { ideal: 480 };
+        break;
+      case '360p':
+        constraints.width = { ideal: 640 };
+        constraints.height = { ideal: 360 };
+        break;
+    }
+    
+    return constraints;
+  };
+
   // Start recording
   const startRecording = async () => {
     try {
+      // Request permissions if not already done
+      if (!hasRequestedPermissions) {
+        await getAvailableDevices(true);
+      }
+
       cleanupRecording();
       activeStreamsRef.current = [];
       
@@ -431,7 +551,7 @@ function App() {
       const streamKeys: string[] = [];
 
       // Get screen stream if selected
-      if (recordOptions.screenIds.includes('main') && supportsDisplayMedia) {
+      if (recordOptions.screenIds.includes('main') && supportsDisplayMedia && !isMobile) {
         try {
           streams.screen = await (navigator.mediaDevices as any).getDisplayMedia({
             video: getResolutionConstraints(),
@@ -461,23 +581,9 @@ function App() {
             micStreams['mic_' + micId] = micStream;
             activeStreamsRef.current.push(micStream);
           } catch (err: any) {
-            try {
-              await navigator.mediaDevices.getUserMedia({ audio: true });
-              const micStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                  deviceId: { exact: micId },
-                  echoCancellation: true,
-                  noiseSuppression: true,
-                },
-                video: false,
-              });
-              micStreams['mic_' + micId] = micStream;
-              activeStreamsRef.current.push(micStream);
-            } catch (finalErr: any) {
-              setPermissionError('Could not get microphone audio stream for device: ' + micId + '\nError: ' + (finalErr?.message || finalErr));
-              cleanupRecording();
-              return;
-            }
+            setPermissionError('Could not get microphone: ' + (err?.message || err));
+            cleanupRecording();
+            return;
           }
         }
       }
@@ -486,43 +592,19 @@ function App() {
       if (recordOptions.cameraIds && recordOptions.cameraIds.length > 0) {
         for (const camId of recordOptions.cameraIds) {
           try {
-            const selectedDevice = cameraDevices.find(d => d.deviceId === camId);
-            const isRearCamera = selectedDevice?.label.toLowerCase().includes('rear') || 
-                                selectedDevice?.label.toLowerCase().includes('back');
+            const resolution = cameraResolutions[camId] || '1080p';
+            const constraints = getCameraConstraints(camId, resolution);
             
-            const cameraConstraints: MediaStreamConstraints = {
-              video: {
-                deviceId: { exact: camId },
-                ...(isMobile && {
-                  facingMode: isRearCamera ? 'environment' : 'user',
-                  width: { ideal: 1920 },
-                  height: { ideal: 1080 }
-                })
-              }
-            };
-            
-            const camStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
+            const camStream = await navigator.mediaDevices.getUserMedia({
+              video: constraints
+            });
             streams['camera_' + camId] = camStream;
             activeStreamsRef.current.push(camStream);
             streamKeys.push('camera_' + camId);
           } catch (err: any) {
-            try {
-              const fallbackConstraints: MediaStreamConstraints = {
-                video: {
-                  facingMode: 'user',
-                  width: { ideal: 1920 },
-                  height: { ideal: 1080 }
-                }
-              };
-              const fallbackStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
-              streams['camera_' + camId] = fallbackStream;
-              activeStreamsRef.current.push(fallbackStream);
-              streamKeys.push('camera_' + camId);
-            } catch (fallbackErr: any) {
-              setPermissionError('Could not access camera: ' + (fallbackErr?.message || fallbackErr));
-              cleanupRecording();
-              return;
-            }
+            setPermissionError('Could not access camera: ' + (err?.message || err));
+            cleanupRecording();
+            return;
           }
         }
       }
@@ -538,8 +620,8 @@ function App() {
 
       const newMediaRecorders: {[key:string]: MediaRecorder} = {};
       const newChunks: {[key:string]: Blob[]} = {};
-      const newVideoUrls: {[key:string]: string | null} = {...videoUrls};
-      const newAudioUrls: {[key:string]: string | null} = {...audioUrls};
+      const newVideoUrls: {[key:string]: string | null} = {};
+      const newAudioUrls: {[key:string]: string | null} = {};
 
       // For each camera stream
       for (const camKey of Object.keys(streams).filter(k => k.startsWith('camera_'))) {
@@ -568,7 +650,7 @@ function App() {
         recorder.onstop = () => {
           const videoBlob = new Blob(newChunks[camKey], { type: 'video/webm' });
           newVideoUrls[camKey] = URL.createObjectURL(videoBlob);
-          setVideoUrls({ ...newVideoUrls });
+          setVideoUrls(prev => ({ ...prev, [camKey]: newVideoUrls[camKey] }));
         };
         newMediaRecorders[camKey] = recorder;
         recorder.start(1000);
@@ -600,7 +682,7 @@ function App() {
         recorder.onstop = () => {
           const videoBlob = new Blob(newChunks['screen'], { type: 'video/webm' });
           newVideoUrls['screen'] = URL.createObjectURL(videoBlob);
-          setVideoUrls({...newVideoUrls});
+          setVideoUrls(prev => ({ ...prev, screen: newVideoUrls['screen'] }));
         };
         newMediaRecorders['screen'] = recorder;
         recorder.start(1000);
@@ -623,7 +705,7 @@ function App() {
           recorder.onstop = () => {
             const audioBlob = new Blob(newChunks[micKey], { type: 'audio/webm' });
             newAudioUrls[micKey] = URL.createObjectURL(audioBlob);
-            setAudioUrls({...newAudioUrls});
+            setAudioUrls(prev => ({ ...prev, [micKey]: newAudioUrls[micKey] }));
           };
           newMediaRecorders[micKey] = recorder;
           recorder.start(1000);
@@ -645,12 +727,12 @@ function App() {
     if (recordOptions.screenIds.includes('main')) {
       setSavedStatus(prev => ({ ...prev, screen: false }));
     }
-    if (recordOptions.cameraIds && recordOptions.cameraIds.length > 0) {
-      setSavedStatus(prev => ({ ...prev, camera: false }));
-    }
-    if (recordOptions.mic && recordOptions.micIds && recordOptions.micIds.length > 0) {
-      setSavedStatus(prev => ({ ...prev, mic: false }));
-    }
+    recordOptions.cameraIds.forEach(camId => {
+      setSavedStatus(prev => ({ ...prev, ['camera_' + camId]: false }));
+    });
+    recordOptions.micIds.forEach(micId => {
+      setSavedStatus(prev => ({ ...prev, ['mic_' + micId]: false }));
+    });
     cleanupRecording();
   };
 
@@ -660,6 +742,14 @@ function App() {
   };
 
   const confirmClear = () => {
+    // Clean up old URLs
+    Object.values(videoUrls).forEach(url => {
+      if (url) URL.revokeObjectURL(url);
+    });
+    Object.values(audioUrls).forEach(url => {
+      if (url) URL.revokeObjectURL(url);
+    });
+    
     setRecordedChunks([]);
     setVideoUrls({});
     setAudioUrls({});
@@ -673,10 +763,11 @@ function App() {
     setShowClearConfirmation(false);
   };
 
-  // Video preview component
-  const VideoPreview: React.FC<{ src: string; title: string }> = ({ src, title }) => {
+  // Video preview component with proper orientation
+  const VideoPreview: React.FC<{ src: string; title: string; deviceId?: string }> = ({ src, title, deviceId }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('landscape');
+    const [duration, setDuration] = useState(0);
     
     useEffect(() => {
       const video = videoRef.current;
@@ -687,6 +778,7 @@ function App() {
         if (videoWidth && videoHeight) {
           setOrientation(videoHeight > videoWidth ? 'portrait' : 'landscape');
         }
+        setDuration(video.duration);
       };
       
       video.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -705,7 +797,8 @@ function App() {
           className={`video-preview ${orientation === 'portrait' ? 'portrait-video' : ''}`}
           style={{
             maxWidth: orientation === 'portrait' ? '300px' : '100%',
-            transform: 'none'
+            transform: 'none',
+            objectFit: 'contain'
           }}
         />
       </div>
@@ -714,22 +807,18 @@ function App() {
 
   // Browser notice component
   const BrowserNotice: React.FC = () => {
-    const { isSafari, isFirefox, isIncognito } = getBrowserInfo();
+    const { isSafari, isFirefox, isIncognito, isMobileSafari } = getBrowserInfo();
     
+    // Don't show on mobile unless it's mobile Safari
+    if (isMobile && !isMobileSafari) return null;
+    
+    // Only show for desktop Safari, Firefox, or incognito mode
     if (!isSafari && !isFirefox && !isIncognito) return null;
     
     return (
-      <div style={{
-        background: '#2a2a2a',
-        border: '1px solid #ff61f4',
-        borderRadius: '8px',
-        padding: '12px',
-        marginBottom: '20px',
-        fontSize: '0.9rem',
-        color: '#fff'
-      }}>
-        {isSafari && (
-          <p>📱 Safari detected: Screen recording is not supported. Camera and microphone recording available.</p>
+      <div className="browser-notice">
+        {isSafari && !isMobile && (
+          <p>📱 Safari detected: Limited recording support. For best experience, use Chrome or Firefox.</p>
         )}
         {isFirefox && (
           <p>🦊 Firefox detected: Full support available. Grant permissions when prompted.</p>
@@ -744,25 +833,11 @@ function App() {
   // Effects
   useEffect(() => {
     checkPermissions();
+    getAvailableDevices(false); // Don't request permissions on load
   }, []);
 
   useEffect(() => {
     setSupportsDisplayMedia(typeof (navigator.mediaDevices as any).getDisplayMedia === 'function');
-  }, []);
-
-  useEffect(() => {
-    const screenWidth = window.screen.width;
-    const screenHeight = window.screen.height;
-    setAvailableScreenResolutions([
-      `${screenWidth}x${screenHeight}`,
-      "1920x1080",
-      "1280x720",
-      "640x480",
-    ]);
-  }, []);
-
-  useEffect(() => {
-    setFullScreenResolution(getFullScreenResolutionLabel());
   }, []);
 
   useEffect(() => {
@@ -785,40 +860,6 @@ function App() {
       }
     ]);
   }, [actualScreenResolution]);
-
-  useEffect(() => {
-    getAvailableDevices();
-    (async () => {
-      try {
-        const status = await navigator.permissions.query({ name: "camera" as PermissionName });
-        setCameraPermission(status.state);
-      } catch {
-        setCameraPermission("unknown");
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    const width = window.screen.width;
-    const height = window.screen.height;
-    let label = "";
-    if (height >= 2160 || width >= 3840) {
-      label = "4k";
-    } else if (height >= 1440 || width >= 2560) {
-      label = "1440p";
-    } else if (height >= 1080 || width >= 1920) {
-      label = "1080p";
-    } else if (height >= 720 || width >= 1280) {
-      label = "720p";
-    } else if (height >= 480 || width >= 854) {
-      label = "480p";
-    } else if (height >= 360 || width >= 640) {
-      label = "360p";
-    } else {
-      label = `${width}x${height}`;
-    }
-    setMaxResolutionLabel(label);
-  }, [fullScreenResolution]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -846,16 +887,32 @@ function App() {
     setRecordedChunks(allChunks);
   }, [videoUrls, audioUrls]);
 
+  // Check if share is supported
+  const isShareSupported = () => {
+    return navigator.share !== undefined && navigator.canShare !== undefined;
+  };
+
   // Main render
   return (
-    <div className="App">
+    <div className={`App ${darkMode ? 'dark-mode' : 'light-mode'}`}>
       <div className="App-header">
+        <div className="theme-toggle">
+          <button
+            className="theme-toggle-btn"
+            onClick={() => setDarkMode(!darkMode)}
+            aria-label="Toggle theme"
+          >
+            {darkMode ? '☀️' : '🌙'}
+          </button>
+        </div>
+        
         <span className="header-subtitle" style={{ marginBottom: '10px' }}>100% vibe coded</span>
-        <h1 className="header-title" style={{ marginTop: 0, marginBottom: '14px' }}>Screen Recorder App</h1>
+        <h1 className="header-title" style={{ marginTop: 0, marginBottom: '14px' }}>Si Recorder</h1>
         <p className="header-description" style={{ marginTop: '0', marginBottom: '18px' }}>
           Capture your devices with ease!
         </p>
         <BrowserNotice />
+        
         <div className="settings-row" style={{ margin: "0 auto", display: "flex", justifyContent: "center" }}>
           <div
             className="settings-grid"
@@ -878,6 +935,7 @@ function App() {
                         type="checkbox"
                         checked={recordOptions.screenIds.length > 0}
                         onChange={e => {
+                          if (recording) return; // Prevent changes during recording
                           let screenIds = recordOptions.screenIds;
                           if (e.target.checked) {
                             screenIds = ['main'];
@@ -886,6 +944,7 @@ function App() {
                           }
                           setRecordOptions({ ...recordOptions, screenIds });
                         }}
+                        disabled={recording}
                         className="styled-checkbox"
                       />
                       Screen
@@ -893,70 +952,67 @@ function App() {
                     {recordOptions.screenIds.length > 0 && (
                       <div className="device-submenu">
                         {!isMobile ? (
-                          screenDevices.map((device, index) => {
-                            let width: number | undefined = device.width, height: number | undefined = device.height;
-                            if ((width === undefined || height === undefined) && device.label) {
-                              const match = device.label.match(/(\d+)x(\d+)/);
-                              if (match) {
-                                width = parseInt(match[1], 10);
-                                height = parseInt(match[2], 10);
+                          <>
+                            {screenDevices.map((device, index) => {
+                              let label = "";
+                              if (device.deviceId === "main" && actualScreenResolution) {
+                                label = `Screen (${actualScreenResolution})`;
                               }
-                            }
-                            let label = "";
-                            if (device.label) {
-                              label = device.label.replace(/\s*\(\d+x\d+\)/, "");
-                            } else {
-                              label = `Screen ${index + 1}`;
-                            }
-                            if (width && height) {
-                              label += ` (${width}x${height})`;
-                            }
-                            if (device.deviceId === "main" && actualScreenResolution) {
-                              label = `Screen (${actualScreenResolution})`;
-                            }
-                            return (
-                              <label key={device.deviceId}>
-                                <input
-                                  type="checkbox"
-                                  checked={recordOptions.screenIds.includes(device.deviceId)}
-                                  onChange={(e) => {
-                                    let screenIds = [...recordOptions.screenIds];
-                                    if (e.target.checked) {
-                                      if (!screenIds.includes(device.deviceId)) screenIds.push(device.deviceId);
-                                    } else {
-                                      screenIds = screenIds.filter((id) => id !== device.deviceId);
-                                    }
-                                    setRecordOptions({ ...recordOptions, screenIds });
-                                  }}
-                                  className="styled-checkbox"
-                                />
-                                <span className="device-label">
-                                  {label}
-                                  {recordOptions.screenIds.includes(device.deviceId) && (
-                                    <span
-                                      className={`device-permission ${
-                                        permissionStatus.screen === 'denied'
-                                          ? 'status-denied'
-                                          : permissionStatus.screen === 'granted'
-                                          ? 'status-granted'
-                                          : 'status-unknown'
-                                      }`}
-                                    >
-                                      : {permissionStatus.screen || 'TBD'}
-                                    </span>
-                                  )}
-                                </span>
-                              </label>
-                            );
-                          })
+                              return (
+                                <label key={device.deviceId}>
+                                  <input
+                                    type="checkbox"
+                                    checked={recordOptions.screenIds.includes(device.deviceId)}
+                                    onChange={(e) => {
+                                      if (recording) return;
+                                      let screenIds = [...recordOptions.screenIds];
+                                      if (e.target.checked) {
+                                        if (!screenIds.includes(device.deviceId)) screenIds.push(device.deviceId);
+                                      } else {
+                                        screenIds = screenIds.filter((id) => id !== device.deviceId);
+                                      }
+                                      setRecordOptions({ ...recordOptions, screenIds });
+                                    }}
+                                    disabled={recording}
+                                    className="styled-checkbox"
+                                  />
+                                  <span className="device-label">
+                                    {label}
+                                    {recordOptions.screenIds.includes(device.deviceId) && (
+                                      <span className="device-permission">
+                                        : {permissionStatus.screen || 'TBD'}
+                                      </span>
+                                    )}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                            {/* Resolution dropdown for screen */}
+                            <div className="settings-row submenu-dropdown">
+                              <div className="settings-label">Resolution:</div>
+                              <select
+                                className="control-select"
+                                value={videoResolution}
+                                onChange={e => setVideoResolution(e.target.value as any)}
+                                disabled={recording}
+                              >
+                                <option value="fullscreen">Max ({actualScreenResolution})</option>
+                                <option value="1080p">1080p</option>
+                                <option value="720p">720p</option>
+                                <option value="480p">480p</option>
+                                <option value="360p">360p</option>
+                              </select>
+                            </div>
+                          </>
                         ) : (
                           <p style={{ color: '#bbb', fontSize: '0.85rem', marginTop: '0.5rem' }}>
-                            Screen recording is not supported on mobile devices. Please try on desktop.
+                            Screen recording is not supported on mobile devices.
                           </p>
                         )}
                       </div>
                     )}
                   </div>
+                  
                   {/* Mic */}
                   <div className={`option-block${recordOptions.mic && micDevices.length > 0 ? ' has-submenu' : ''}`}>
                     <label className="options-checkbox">
@@ -964,6 +1020,7 @@ function App() {
                         type="checkbox"
                         checked={recordOptions.mic}
                         onChange={e => {
+                          if (recording) return;
                           if (e.target.checked) {
                             let micIds = recordOptions.micIds;
                             if (micIds.length === 0 && micDevices.length > 0) {
@@ -974,6 +1031,7 @@ function App() {
                             setRecordOptions({ ...recordOptions, mic: false, micIds: [] });
                           }
                         }}
+                        disabled={recording}
                         className="styled-checkbox"
                       />
                       Mic
@@ -986,6 +1044,7 @@ function App() {
                               type="checkbox"
                               checked={recordOptions.micIds.includes(device.deviceId)}
                               onChange={e => {
+                                if (recording) return;
                                 let micIds = [...recordOptions.micIds];
                                 if (e.target.checked) {
                                   if (!micIds.includes(device.deviceId)) micIds.push(device.deviceId);
@@ -994,66 +1053,103 @@ function App() {
                                 }
                                 setRecordOptions({ ...recordOptions, micIds });
                               }}
+                              disabled={recording}
                               className="styled-checkbox"
                             />
                             <span className="device-label">
                               {device.label || `Mic ${device.deviceId.slice(-4)}`}
                               {recordOptions.micIds.includes(device.deviceId) && (
-                                <span
-                                  className={`device-permission ${
-                                    permissionStatus.microphone === 'denied'
-                                      ? 'status-denied'
-                                      : permissionStatus.microphone === 'granted'
-                                      ? 'status-granted'
-                                      : 'status-unknown'
-                                  }`}
-                                >
+                                <span className="device-permission">
                                   : {permissionStatus.microphone || 'TBD'}
                                 </span>
                               )}
                             </span>
                           </label>
                         ))}
+                        {/* Audio quality dropdown */}
+                        <div className="settings-row submenu-dropdown">
+                          <div className="settings-label">Quality:</div>
+                          <select
+                            className="control-select"
+                            value={audioQuality}
+                            onChange={e => setAudioQuality(e.target.value)}
+                            disabled={recording}
+                          >
+                            <option value="low">Low (64kbps)</option>
+                            <option value="mid">Mid (128kbps)</option>
+                            <option value="best">Best (256kbps)</option>
+                          </select>
+                        </div>
                       </div>
                     )}
                   </div>
+                  
                   {/* Camera */}
-                  <div className={`option-block${selectedCamera ? ' has-submenu' : ''}`}>
+                  <div className={`option-block${recordOptions.cameraIds.length > 0 ? ' has-submenu' : ''}`}>
                     <label className="options-checkbox">
                       <input
                         type="checkbox"
-                        checked={!!selectedCamera}
+                        checked={recordOptions.cameraIds.length > 0}
                         onChange={e => {
+                          if (recording) return;
                           if (e.target.checked) {
                             if (cameraDevices.length > 0) {
-                              setSelectedCamera(cameraDevices[0]);
                               setRecordOptions({ ...recordOptions, cameraIds: [cameraDevices[0].deviceId] });
                             }
                           } else {
-                            setSelectedCamera(null);
                             setRecordOptions({ ...recordOptions, cameraIds: [] });
                           }
                         }}
+                        disabled={recording}
                         className="styled-checkbox"
                       />
                       Camera
                     </label>
-                    {selectedCamera && (
+                    {recordOptions.cameraIds.length > 0 && (
                       <div className="device-submenu">
                         {cameraDevices.map((device) => (
-                          <label key={device.deviceId} className="device-item">
-                            <input
-                              type="radio"
-                              name="cameraSelection"
-                              checked={selectedCamera?.deviceId === device.deviceId}
-                              onChange={() => {
-                                setSelectedCamera(device);
-                                setRecordOptions({ ...recordOptions, cameraIds: [device.deviceId] });
-                              }}
-                            />
-                            <span className="device-label">{device.label || "Camera"}</span>
-                            <span className={`device-permission${cameraPermission === "granted" ? " granted" : ""}`}>{cameraPermission === "granted" ? ":granted" : ""}</span>
-                          </label>
+                          <div key={device.deviceId}>
+                            <label className="device-item">
+                              <input
+                                type="checkbox"
+                                checked={recordOptions.cameraIds.includes(device.deviceId)}
+                                onChange={() => {
+                                  if (recording) return;
+                                  let cameraIds = [...recordOptions.cameraIds];
+                                  if (cameraIds.includes(device.deviceId)) {
+                                    cameraIds = cameraIds.filter(id => id !== device.deviceId);
+                                  } else {
+                                    cameraIds.push(device.deviceId);
+                                  }
+                                  setRecordOptions({ ...recordOptions, cameraIds });
+                                }}
+                                disabled={recording}
+                              />
+                              <span className="device-label">{device.label || "Camera"}</span>
+                              <span className="device-permission">
+                                {recordOptions.cameraIds.includes(device.deviceId) && cameraPermission === "granted" ? ": granted" : ""}
+                              </span>
+                            </label>
+                            {/* Camera resolution dropdown */}
+                            {recordOptions.cameraIds.includes(device.deviceId) && availableCameraResolutions[device.deviceId] && (
+                              <div className="settings-row submenu-dropdown camera-resolution">
+                                <div className="settings-label">Resolution:</div>
+                                <select
+                                  className="control-select"
+                                  value={cameraResolutions[device.deviceId] || '1080p'}
+                                  onChange={e => setCameraResolutions(prev => ({
+                                    ...prev,
+                                    [device.deviceId]: e.target.value
+                                  }))}
+                                  disabled={recording}
+                                >
+                                  {availableCameraResolutions[device.deviceId].map(res => (
+                                    <option key={res} value={res}>{res}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          </div>
                         ))}
                       </div>
                     )}
@@ -1064,82 +1160,15 @@ function App() {
           </div>
         </div>
 
-        {/* Settings */}
-        <div className="settings-group">
-          <div className="settings-grid">
-            <div className="settings-row">
-              <div className="settings-label">Audio:</div>
-              <div className="settings-control">
-                <select
-                  className="control-select"
-                  value={audioQuality}
-                  onChange={e => setAudioQuality(e.target.value)}
-                  style={{ width: "200px" }}
-                >
-                  <option value="low">Low (64kbps)</option>
-                  <option value="mid">Mid (128kbps)</option>
-                  <option value="best">Best (256kbps)</option>
-                </select>
-              </div>
-            </div>
-            <div className="settings-row">
-              <div className="settings-label">Resolution:</div>
-              <div className="settings-control">
-                {(() => {
-                  const availableResolutions = [
-                    { label: "720p", width: 1280, height: 720, value: "720p" },
-                    { label: "1080p", width: 1920, height: 1080, value: "1080p" },
-                  ];
-                  const physicalHeight = Math.floor(window.screen.height * window.devicePixelRatio);
-                  if (physicalHeight >= 1440) {
-                    availableResolutions.push({ label: "1440p", width: 2560, height: 1440, value: "1440p" });
-                  }
-                  if (physicalHeight >= 2160) {
-                    availableResolutions.push({ label: "4k", width: 3840, height: 2160, value: "4k" });
-                  }
-                  availableResolutions.push({
-                    label: `Max (${window.screen.width}×${window.screen.height})`,
-                    width: window.screen.width,
-                    height: window.screen.height,
-                    value: "fullscreen"
-                  });
-                  const extraResolutions = [
-                    { label: "480p", width: 854, height: 480, value: "480p" },
-                    { label: "360p", width: 640, height: 360, value: "360p" },
-                  ];
-                  const allResolutions = [
-                    ...availableResolutions,
-                    ...extraResolutions.filter(er => !availableResolutions.some(r => r.value === er.value)),
-                  ];
-                  const sortedResolutions = [
-                    ...allResolutions.filter(r => r.value === "fullscreen"),
-                    ...allResolutions.filter(r => r.value !== "fullscreen").sort((a, b) => b.height - a.height),
-                  ];
-                  return (
-                    <select
-                      className="control-select"
-                      value={videoResolution}
-                      onChange={e => setVideoResolution(e.target.value as any)}
-                      style={{ width: "200px" }}
-                    >
-                      {sortedResolutions.map(r => (
-                        <option key={r.value} value={r.value}>
-                          {r.value === "fullscreen" ? `Max (${actualScreenResolution})` : r.label}
-                        </option>
-                      ))}
-                    </select>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
-        </div>
-
         <div className="action-buttons">
           <button className="btn" onClick={startRecording} disabled={recording}>
             Start Recording
           </button>
-          <button className="neon-stop" onClick={stopRecording} disabled={!recording}>
+          <button 
+            className={recording ? "neon-stop" : "btn-disabled"} 
+            onClick={stopRecording} 
+            disabled={!recording}
+          >
             Stop Recording
           </button>
         </div>
@@ -1149,24 +1178,11 @@ function App() {
           <div className="custom-modal">
             <div className="modal-content">
               <p style={{ whiteSpace: "pre-line" }}>
-                {permissionError === "No recording options selected."
-                  ? "Please select a recording device."
-                  : permissionError}
+                {permissionError}
               </p>
-              {permissionError === "No recording options selected." ? (
-                <button onClick={() => setPermissionError(null)} className="btn neon-stop">
-                  OK
-                </button>
-              ) : (
-                <>
-                  <button onClick={retryPermissions} className="btn" style={{ marginRight: "8px" }}>
-                    Retry Permissions
-                  </button>
-                  <button onClick={() => setPermissionError(null)} className="btn neon-stop">
-                    Resume
-                  </button>
-                </>
-              )}
+              <button onClick={() => setPermissionError(null)} className="btn neon-stop">
+                OK
+              </button>
             </div>
           </div>
         )}
@@ -1200,8 +1216,8 @@ function App() {
         <div className="preview-controls" style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
           {saveMessage && (
             <div className="save-toast" style={{
-              background: '#222',
-              color: '#fff',
+              background: darkMode ? '#222' : '#f0f0f0',
+              color: darkMode ? '#fff' : '#000',
               padding: '10px 22px',
               borderRadius: '8px',
               margin: '12px 0',
@@ -1214,7 +1230,7 @@ function App() {
                 style={{
                   marginLeft: 18,
                   background: 'transparent',
-                  color: '#fff',
+                  color: darkMode ? '#fff' : '#000',
                   border: 'none',
                   fontSize: '1.2em',
                   cursor: 'pointer'
@@ -1234,83 +1250,90 @@ function App() {
                 >
                   {savedStatus['screen'] ? 'Saved' : 'Save'}
                 </button>
-                <button
-                  className="neon-save"
-                  onClick={() => {
-                    const chunksArr = chunks.current['screen'] || [];
-                    if (!chunksArr.length) return;
-                    const blob = new Blob(chunksArr, { type: 'video/webm' });
-                    const fileName = generateFilename("screen", videoResolution);
-                    if (navigator.share && blob) {
-                      const file = new File([blob], fileName, { type: blob.type });
-                      navigator.share({
-                        title: 'Screen Recording',
-                        text: 'Check out this recording!',
-                        files: [file],
-                      });
-                    } else {
-                      handleDownload(blob, fileName, 'screen');
-                    }
-                  }}
-                >
-                  Share
-                </button>
+                {isShareSupported() && (
+                  <button
+                    className="neon-save"
+                    onClick={() => {
+                      const chunksArr = chunks.current['screen'] || [];
+                      if (!chunksArr.length) return;
+                      const blob = new Blob(chunksArr, { type: 'video/webm' });
+                      const fileName = generateFilename("screen", videoResolution);
+                      if (navigator.share && blob) {
+                        const file = new File([blob], fileName, { type: blob.type });
+                        navigator.share({
+                          title: 'Screen Recording',
+                          text: 'Check out this recording!',
+                          files: [file],
+                        }).catch(err => console.log('Share failed:', err));
+                      }
+                    }}
+                  >
+                    Share
+                  </button>
+                )}
                 <span className="file-size">
                   {formatSize(chunks.current['screen']?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
                 </span>
               </div>
             </div>
           )}
-          {selectedCamera && videoUrls['camera_' + selectedCamera.deviceId] && (
-            <div key={selectedCamera.deviceId} style={{marginBottom: '20px', textAlign: 'center'}}>
-              <VideoPreview 
-                src={videoUrls['camera_' + selectedCamera.deviceId]} 
-                title={`Camera ${selectedCamera.label || `Camera ${selectedCamera.deviceId.slice(-4)}`}`}
-              />
-              <div className="save-button-container">
-                <button
-                  className="neon-save"
-                  onClick={() => handleDownload(chunks.current['camera_' + selectedCamera.deviceId] || [], generateFilename("cam", videoResolution), 'camera')}
-                  style={{marginTop: '8px'}}
-                >
-                  {savedStatus['camera'] ? 'Saved' : 'Save'}
-                </button>
-                <button
-                  className="neon-save"
-                  onClick={() => {
-                    const chunksArr = chunks.current['camera_' + selectedCamera.deviceId] || [];
-                    if (!chunksArr.length) return;
-                    const blob = new Blob(chunksArr, { type: 'video/webm' });
-                    const fileName = generateFilename("cam", videoResolution);
-                    if (navigator.share && blob) {
-                      const file = new File([blob], fileName, { type: blob.type });
-                      navigator.share({
-                        title: 'Screen Recording',
-                        text: 'Check out this recording!',
-                        files: [file],
-                      });
-                    } else {
-                      handleDownload(blob, fileName, 'camera');
-                    }
-                  }}
-                  style={{marginTop: '8px'}}
-                >
-                  Share
-                </button>
-                <span className="file-size">
-                  {formatSize(chunks.current['camera_' + selectedCamera.deviceId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
-                </span>
+          {recordOptions.cameraIds.map(camId => {
+            const device = cameraDevices.find(d => d.deviceId === camId);
+            if (!device || !videoUrls['camera_' + camId]) return null;
+            
+            return (
+              <div key={camId} style={{marginBottom: '20px', textAlign: 'center'}}>
+                <VideoPreview 
+                  src={videoUrls['camera_' + camId]} 
+                  title={`${device.label || 'Camera'}`}
+                  deviceId={camId}
+                />
+                <div className="save-button-container">
+                  <button
+                    className="neon-save"
+                    onClick={() => handleDownload(
+                      chunks.current['camera_' + camId] || [], 
+                      generateFilename("cam", cameraResolutions[camId]), 
+                      'camera_' + camId
+                    )}
+                  >
+                    {savedStatus['camera_' + camId] ? 'Saved' : 'Save'}
+                  </button>
+                  {isShareSupported() && (
+                    <button
+                      className="neon-save"
+                      onClick={() => {
+                        const chunksArr = chunks.current['camera_' + camId] || [];
+                        if (!chunksArr.length) return;
+                        const blob = new Blob(chunksArr, { type: 'video/webm' });
+                        const fileName = generateFilename("cam", cameraResolutions[camId]);
+                        if (navigator.share && blob) {
+                          const file = new File([blob], fileName, { type: blob.type });
+                          navigator.share({
+                            title: 'Camera Recording',
+                            text: 'Check out this recording!',
+                            files: [file],
+                          }).catch(err => console.log('Share failed:', err));
+                        }
+                      }}
+                    >
+                      Share
+                    </button>
+                  )}
+                  <span className="file-size">
+                    {formatSize(chunks.current['camera_' + camId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
-          {recordOptions.mic && recordOptions.micIds && recordOptions.micIds.map(micId =>
-            audioUrls['mic_' + micId] ? (
+            );
+          })}
+          {recordOptions.micIds.map(micId => {
+            const device = micDevices.find(d => d.deviceId === micId);
+            if (!device || !audioUrls['mic_' + micId]) return null;
+            
+            return (
               <div key={micId} style={{marginBottom: '20px', textAlign: 'center'}}>
-                <h3>
-                  Audio&nbsp;
-                  {micDevices.find(d => d.deviceId === micId)?.label ||
-                    `Mic ${micId.slice(-4)}`}
-                </h3>
+                <h3>{device.label || `Mic ${micId.slice(-4)}`}</h3>
                 <audio
                   src={audioUrls['mic_' + micId] || undefined}
                   controls
@@ -1318,42 +1341,46 @@ function App() {
                 <div className="save-button-container">
                   <button
                     className="neon-save"
-                    onClick={() => handleDownload(chunks.current['mic_' + micId] || [], generateFilename("mic", videoResolution), 'mic')}
+                    onClick={() => handleDownload(
+                      chunks.current['mic_' + micId] || [], 
+                      generateFilename("mic", audioQuality), 
+                      'mic_' + micId
+                    )}
                   >
-                    {savedStatus['mic'] ? 'Saved' : 'Save'}
+                    {savedStatus['mic_' + micId] ? 'Saved' : 'Save'}
                   </button>
-                  <button
-                    className="neon-save"
-                    onClick={() => {
-                      const chunksArr = chunks.current['mic_' + micId] || [];
-                      if (!chunksArr.length) return;
-                      const blob = new Blob(chunksArr, { type: 'video/webm' });
-                      const fileName = generateFilename("mic", videoResolution);
-                      if (navigator.share && blob) {
-                        const file = new File([blob], fileName, { type: blob.type });
-                        navigator.share({
-                          title: 'Screen Recording',
-                          text: 'Check out this recording!',
-                          files: [file],
-                        });
-                      } else {
-                        handleDownload(blob, fileName, 'mic');
-                      }
-                    }}
-                  >
-                    Share
-                  </button>
+                  {isShareSupported() && (
+                    <button
+                      className="neon-save"
+                      onClick={() => {
+                        const chunksArr = chunks.current['mic_' + micId] || [];
+                        if (!chunksArr.length) return;
+                        const blob = new Blob(chunksArr, { type: 'audio/webm' });
+                        const fileName = generateFilename("mic", audioQuality);
+                        if (navigator.share && blob) {
+                          const file = new File([blob], fileName, { type: blob.type });
+                          navigator.share({
+                            title: 'Audio Recording',
+                            text: 'Check out this recording!',
+                            files: [file],
+                          }).catch(err => console.log('Share failed:', err));
+                        }
+                      }}
+                    >
+                      Share
+                    </button>
+                  )}
                   <span className="file-size">
                     {formatSize(chunks.current['mic_' + micId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
                   </span>
                 </div>
               </div>
-            ) : null
-          )}
+            );
+          })}
         </div>
         
         {/* Clear All button */}
-        {(recordedChunks.length > 0 || videoUrls.screen || Object.values(videoUrls).some(Boolean) || Object.values(audioUrls).some(Boolean)) && (
+        {(recordedChunks.length > 0 || Object.values(videoUrls).some(Boolean) || Object.values(audioUrls).some(Boolean)) && (
           <>
             <button
               className="clear-button"
@@ -1362,8 +1389,8 @@ function App() {
               Clear All
             </button>
             {showClearConfirmation && (
-              <div className="modal">
-                <div className="modal-content">
+              <div className="modal confirmation-modal-center">
+                <div className="modal-content" ref={clearConfirmationRef}>
                   <p>Are you sure you want to delete current recordings?</p>
                   <div className="popup-buttons">
                     <button className="popup-button confirm" onClick={confirmClear}>Yes</button>
