@@ -182,30 +182,40 @@ const projectTimeline = [
     date: 'June 1-24, 2025',
     body: 'Main carried a Claude Opus 4 review pass and follow-up cleanup before this 2026 Sadilek Innovation refresh.',
   },
+  {
+    date: 'June 10, 2026',
+    body: 'Functional pass stabilized multi-screen capture, exact microphone selection, input metering, mobile camera fallbacks, and local dev access for desktop and phone testing.',
+  },
 ];
 
 const technicalWins = [
   'Frontend-only capture flow: files are created in the browser session and saved or shared only when the user chooses.',
   'Separate screen, camera, and mic outputs with per-source save/share actions and generated filenames.',
   'Multiple screen slots can be captured as separate files through repeated browser display-picker prompts.',
-  'Screen and camera resolution controls, including camera capability checks deferred until users opt into camera access.',
-  'Microphone capture includes gain, echo cancellation, noise suppression, auto gain, and per-device audio-only outputs.',
+  'Microphone capture now keeps OS default, named physical inputs, and browser-default fallback paths distinct so exact device selection stays stable.',
+  'Input gain and live dBFS metering help tune levels while echo cancellation, noise suppression, and auto gain remain user-controlled.',
+  'MediaDeviceInfo objects are normalized with explicit deviceId, groupId, kind, and label copying so browser-provided device IDs are not lost during UI labeling.',
+  'Mobile camera behavior favors reliability: front/rear fallback cameras are single-choice when the browser does not expose stable per-camera IDs.',
+  'Continuity/iPhone inputs are tracked as browser-dependent future work without weakening the stable desktop mic path.',
 ];
 
 const stackDetails = [
   'React 18, TypeScript, and Vite 6 for the frontend app shell.',
   'Browser MediaDevices, getDisplayMedia, getUserMedia, and MediaRecorder APIs for capture.',
+  'Web Audio API GainNode and AnalyserNode support microphone gain and peak-level metering.',
   '@ffmpeg/ffmpeg is included for browser-side media conversion support.',
   'file-saver and mime support download/export handling.',
   'Docker and nginx are included for static deployment hosting.',
-  'Tailwind/PostCSS tooling exists in the project, while this UI pass is primarily custom CSS.',
+  'Tailwind/PostCSS tooling exists in the project, while the 2026 refresh and functional controls are primarily custom CSS.',
+  'Vite local serving is pinned to port 5173 with LAN/Tailscale host access for phone-device testing.',
 ];
 
 const toolNotes = [
   'Confirmed from repo history: the project began from a Bolt DIY build.',
   'Development notes from this pass: early work used free OpenRouter credits through Bolt DIY, with extra help from ChatGPT through a Cursor/VS Code workflow.',
   'Confirmed from a June 1 commit: a Claude Opus 4 review pass influenced later refinements.',
-  'Current 2026 refresh is being edited in Codex.',
+  'The June 2026 design and functional refresh was edited in Codex through iterative local browser testing.',
+  'The repo now tracks known issues and future work for Continuity/iPhone microphones, mobile multi-camera capture, and recording-flow polish.',
   'Other exact model/editor details are not recorded in this repo, so they are not claimed here.',
 ];
 

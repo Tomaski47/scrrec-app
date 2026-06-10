@@ -8,6 +8,26 @@ Last updated: June 10, 2026
 - Desktop microphone capture supports the OS default input, named physical inputs, gain, input metering, echo cancellation, noise suppression, and auto gain controls.
 - Camera capture supports browser-exposed camera devices, with mobile front/rear fallback behavior kept to one active camera at a time when the browser does not expose separate stable device IDs.
 
+## Implementation Notes
+
+### Media Device Normalization
+
+The June 2026 functional pass found that copying `MediaDeviceInfo` objects with object spread can drop important browser-provided fields such as `deviceId`, `kind`, and `groupId`. Those fields are not guaranteed to behave like normal enumerable object properties in every browser. The app now uses explicit field copying when normalizing media devices so labels can be improved without losing the stable IDs needed for exact mic and camera selection.
+
+### Microphone Selection
+
+The stable microphone flow separates three concepts that should not be collapsed together:
+
+- OS/system default input.
+- Named physical or virtual inputs with real browser `deviceId` values.
+- Browser-default fallback input for cases where the browser can open audio but does not expose a stable per-device ID.
+
+This is why the app keeps `Refresh mics` as a quiet enumeration action and `Scan inputs` as an optional stronger probe that briefly opens mic access. Exact device IDs remain the preferred path. Browser-default fallback stays available, but it should not be used to pretend that multiple unresolved devices are individually selectable.
+
+### Screen and Camera Decisions
+
+Browsers do not enumerate screens the same way they enumerate cameras and microphones. The app uses screen slots instead: each selected slot opens the browser display picker, and each chosen display records as a separate file. For mobile cameras, front/rear fallback labels are kept single-choice when the browser does not expose stable IDs, because simultaneous front/rear mobile capture is not reliable in current browser behavior.
+
 ## Future Work
 
 ### Apple Continuity and iPhone Microphones
