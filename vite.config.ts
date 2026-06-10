@@ -10,7 +10,4 @@ export default defineConfig({
     port: 5173,
     allowedHosts: ['tomass-macbook-pro.tail6f3ab4.ts.net'],
   },
-  optimizeDeps: {
-    exclude: ['@ffmpeg/ffmpeg'],
-  },
 });

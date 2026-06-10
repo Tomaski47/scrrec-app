@@ -1,7 +1,18 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "scrrec-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "A local-first browser screen, camera, and microphone recorder from Sadilek Innovation.",
+  "license": "MIT",
+  "author": "Sadilek Innovation",
+  "homepage": "https://screc.sadilekinnovation.com/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tomaski47/scrrec-app.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Tomaski47/scrrec-app/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -11,7 +22,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@ffmpeg/ffmpeg": "^0.12.14",
     "file-saver": "^2.0.5",
     "mime": "^4.0.7",
     "react": "^18.3.1",

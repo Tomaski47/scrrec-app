@@ -1,12 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
-// Utility function to get the full native screen resolution (physical pixels)
-const getDeviceResolution = () => {
-  const width = Math.floor(window.screen.width * window.devicePixelRatio);
-  const height = Math.floor(window.screen.height * window.devicePixelRatio);
-  return { width, height };
+type WebkitAudioWindow = Window & typeof globalThis & {
+  webkitAudioContext?: typeof AudioContext;
 };
+
+type VideoResolution = 'fullscreen' | '1080p' | '720p' | '480p' | '360p';
+
+const getErrorMessage = (err: unknown) => (
+  err instanceof Error ? err.message : String(err)
+);
+
+const getAudioContextCtor = () => (
+  window.AudioContext || (window as WebkitAudioWindow).webkitAudioContext
+);
 
 // Utility function to detect browser type
 const getBrowserInfo = () => {
@@ -87,7 +94,7 @@ const getCameraCapabilities = async (deviceId: string): Promise<string[]> => {
       return resolutions;
     }
     return ["1080p", "720p", "480p"];
-  } catch (err) {
+  } catch {
     return ["1080p", "720p", "480p"];
   }
 };
@@ -168,7 +175,7 @@ const projectTimeline = [
   },
   {
     date: 'May 30-31, 2025',
-    body: 'FFmpeg packaging, mobile audio fallback, recording format controls, and resolution options landed.',
+    body: 'Media packaging experiments, mobile audio fallback, recording format controls, and resolution options landed.',
   },
   {
     date: 'May 31, 2025',
@@ -203,7 +210,6 @@ const stackDetails = [
   'React 18, TypeScript, and Vite 6 for the frontend app shell.',
   'Browser MediaDevices, getDisplayMedia, getUserMedia, and MediaRecorder APIs for capture.',
   'Web Audio API GainNode and AnalyserNode support microphone gain and peak-level metering.',
-  '@ffmpeg/ffmpeg is included for browser-side media conversion support.',
   'file-saver and mime support download/export handling.',
   'Docker and nginx are included for static deployment hosting.',
   'Tailwind/PostCSS tooling exists in the project, while the 2026 refresh and functional controls are primarily custom CSS.',
@@ -492,13 +498,10 @@ function App() {
   
   // State declarations
   const [showClearConfirmation, setShowClearConfirmation] = useState(false);
-  const [hasCleared, setHasCleared] = useState(false);
   const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
   const [permissionStatus, setPermissionStatus] = useState<Record<string, string>>({});
-  const [isConverting, setIsConverting] = useState(false);
   const [audioQuality, setAudioQuality] = useState('best');
-  const [fileFormat, setFileFormat] = useState('webm');
-  const [videoResolution, setVideoResolution] = useState<'fullscreen' | '1080p' | '720p' | '480p' | '360p'>('fullscreen');
+  const [videoResolution, setVideoResolution] = useState<VideoResolution>('fullscreen');
   const [cameraResolutions, setCameraResolutions] = useState<{[deviceId: string]: string}>({});
   const [availableCameraResolutions, setAvailableCameraResolutions] = useState<{[deviceId: string]: string[]}>({});
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -523,12 +526,7 @@ function App() {
   const [micLevelPercent, setMicLevelPercent] = useState(0);
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
-  const [cameraPermission, setCameraPermission] = useState<string>("unknown");
-  const [fullScreenResolution, setFullScreenResolution] = useState<string>('');
-  const [actualScreenResolution, setActualScreenResolution] = useState("");
   const [screenDevices, setScreenDevices] = useState<ScreenDevice[]>([createScreenDevice(1)]);
-  const [availableScreenResolutions, setAvailableScreenResolutions] = useState<string[]>([]);
-  const [maxResolutionLabel, setMaxResolutionLabel] = useState("1080p");
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordingSize, setRecordingSize] = useState(0);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -537,7 +535,6 @@ function App() {
   const [hasRequestedVideoPermission, setHasRequestedVideoPermission] = useState(false);
 
   // Refs
-  const ffmpeg = useRef<any>(null);
   const activeStreamsRef = useRef<MediaStream[]>([]);
   const audioContextsRef = useRef<AudioContext[]>([]);
   const audioGainRef = useRef(audioProcessing.gain);
@@ -617,19 +614,6 @@ function App() {
     setPermissionStatus(statuses);
   };
 
-  // Load FFmpeg
-  const loadFFmpeg = async () => {
-    if (!ffmpeg.current) {
-      const ffmpegModule = await import(/* @vite-ignore */ '@ffmpeg/ffmpeg');
-      const createFFmpeg = ffmpegModule.createFFmpeg || ffmpegModule.default?.createFFmpeg;
-      if (!createFFmpeg) {
-        throw new Error('createFFmpeg is not available from @ffmpeg/ffmpeg import');
-      }
-      ffmpeg.current = createFFmpeg({ log: true });
-      await ffmpeg.current.load();
-    }
-  };
-
   const loadCameraResolutions = async (devices: MediaDeviceInfo[]) => {
     for (const camera of devices) {
       if (availableCameraResolutions[camera.deviceId]) continue;
@@ -673,7 +657,7 @@ function App() {
         (!needsAudio || hasRequestedAudioPermission) &&
         (!needsVideo || hasRequestedVideoPermission);
 
-      let grantedThisRequest = {
+      const grantedThisRequest = {
         audio: false,
         video: false,
       };
@@ -699,7 +683,7 @@ function App() {
             ...(needsAudio ? { microphone: 'granted' } : {}),
             ...(needsVideo ? { camera: 'granted' } : {}),
           }));
-        } catch (err) {
+        } catch {
           console.log('Permission denied or not available');
           await checkPermissions();
         }
@@ -710,7 +694,6 @@ function App() {
       let audioDevices = devices.filter(device => device.kind === 'audioinput');
       
       // Enhanced camera labeling
-      const cameraLabels = new Map<string, number>();
       const frontCameras: MediaDeviceInfo[] = [];
       const rearCameras: MediaDeviceInfo[] = [];
       const unknownCameras: MediaDeviceInfo[] = [];
@@ -779,8 +762,6 @@ function App() {
 
   // Get recorder options
   const getRecorderOptions = (hasVideo: boolean, hasAudio: boolean) => {
-    const { isSafari, isFirefox } = getBrowserInfo();
-    
     const videoMimeTypes = [
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
@@ -947,7 +928,7 @@ function App() {
 
   // Get camera constraints based on resolution
   const getCameraConstraints = (deviceId: string, resolution: string) => {
-    const constraints: any = {};
+    const constraints: MediaTrackConstraints = {};
 
     if (deviceId === genericFrontCameraId) {
       constraints.facingMode = { ideal: 'user' };
@@ -1040,7 +1021,7 @@ function App() {
         microphone: 'granted',
       }));
       return true;
-    } catch (err: any) {
+    } catch (err) {
       console.warn('Could not unlock microphone access:', err);
       await checkPermissions();
       setPermissionError('Could not get microphone access. Check browser and system microphone permissions, then try selecting the microphone again.');
@@ -1051,7 +1032,7 @@ function App() {
   const applyMicGain = (stream: MediaStream) => {
     if (audioProcessing.gain === 1) return stream;
 
-    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+    const AudioContextCtor = getAudioContextCtor();
     if (!AudioContextCtor) return stream;
 
     const context = new AudioContextCtor();
@@ -1091,7 +1072,7 @@ function App() {
     micMeterRequestRef.current = requestId;
     stopMicMeter(false);
 
-    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+    const AudioContextCtor = getAudioContextCtor();
     if (!AudioContextCtor) return;
 
     try {
@@ -1161,8 +1142,8 @@ function App() {
   const handleMicDeviceChange = async (device: MediaDeviceInfo, shouldSelect: boolean) => {
     if (recording) return;
 
-    let selectableMic = shouldSelect ? resolveSelectableMic(device) : device;
-    let selectableMicId = selectableMic?.deviceId || getMicSelectionId(device);
+    const selectableMic = shouldSelect ? resolveSelectableMic(device) : device;
+    const selectableMicId = selectableMic?.deviceId || getMicSelectionId(device);
 
     if (shouldSelect && isMicUnlockId(selectableMicId)) {
       const didUnlockMic = await requestGenericMicAccess();
@@ -1257,13 +1238,13 @@ function App() {
         for (const screenId of selectedScreenIds) {
           const screenLabel = screenDevices.find(device => device.deviceId === screenId)?.label || 'Screen';
           try {
-            streams[screenId] = await (navigator.mediaDevices as any).getDisplayMedia({
+            streams[screenId] = await navigator.mediaDevices.getDisplayMedia({
               video: getResolutionConstraints(),
             });
             activeStreamsRef.current.push(streams[screenId]);
             streamKeys.push(screenId);
-          } catch (err: any) {
-            setPermissionError(`Could not get ${screenLabel} stream.\nError: ` + (err?.message || err));
+          } catch (err) {
+            setPermissionError(`Could not get ${screenLabel} stream.\nError: ` + getErrorMessage(err));
             cleanupRecording();
             return;
           }
@@ -1271,7 +1252,7 @@ function App() {
       }
 
       // Get mic streams if selected
-      let micStreams: {[key: string]: MediaStream} = {};
+      const micStreams: {[key: string]: MediaStream} = {};
       if (recordOptions.mic && recordOptions.micIds && recordOptions.micIds.length > 0) {
         for (const micId of recordOptions.micIds) {
           try {
@@ -1285,8 +1266,8 @@ function App() {
               activeStreamsRef.current.push(processedMicStream);
             }
             micStreams['mic_' + micId] = processedMicStream;
-          } catch (err: any) {
-            setPermissionError('Could not get microphone: ' + (err?.message || err));
+          } catch (err) {
+            setPermissionError('Could not get microphone: ' + getErrorMessage(err));
             cleanupRecording();
             return;
           }
@@ -1315,8 +1296,8 @@ function App() {
             streams['camera_' + camId] = camStream;
             activeStreamsRef.current.push(camStream);
             streamKeys.push('camera_' + camId);
-          } catch (err: any) {
-            setPermissionError('Could not access camera: ' + (err?.message || err));
+          } catch (err) {
+            setPermissionError('Could not access camera: ' + getErrorMessage(err));
             cleanupRecording();
             return;
           }
@@ -1432,7 +1413,7 @@ function App() {
     } catch (err) {
       console.error('Recording error:', err);
       cleanupRecording();
-      setPermissionError('Could not start recording: ' + err);
+      setPermissionError('Could not start recording: ' + getErrorMessage(err));
     }
   };
 
@@ -1470,7 +1451,6 @@ function App() {
     chunks.current = {};
     setSavedStatus({});
     setShowClearConfirmation(false);
-    setHasCleared(true);
   };
 
   const cancelClear = () => {
@@ -1478,10 +1458,9 @@ function App() {
   };
 
   // Video preview component with proper orientation
-  const VideoPreview: React.FC<{ src: string; title: string; deviceId?: string }> = ({ src, title, deviceId }) => {
+  const VideoPreview: React.FC<{ src: string; title: string }> = ({ src, title }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('landscape');
-    const [duration, setDuration] = useState(0);
     
     useEffect(() => {
       const video = videoRef.current;
@@ -1492,7 +1471,6 @@ function App() {
         if (videoWidth && videoHeight) {
           setOrientation(videoHeight > videoWidth ? 'portrait' : 'landscape');
         }
-        setDuration(video.duration);
       };
       
       video.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -1548,6 +1526,8 @@ function App() {
   useEffect(() => {
     checkPermissions();
     getAvailableDevices(false); // Don't request permissions on load
+    // Run once on mount so the browser can list any already exposed devices.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -1557,13 +1537,7 @@ function App() {
   useEffect(() => () => stopMicMeter(), []);
 
   useEffect(() => {
-    setSupportsDisplayMedia(typeof (navigator.mediaDevices as any).getDisplayMedia === 'function');
-  }, []);
-
-  useEffect(() => {
-    const screenWidth = Math.floor(window.screen.width * window.devicePixelRatio);
-    const screenHeight = Math.floor(window.screen.height * window.devicePixelRatio);
-    setActualScreenResolution(`${screenWidth}x${screenHeight}`);
+    setSupportsDisplayMedia(typeof navigator.mediaDevices.getDisplayMedia === 'function');
   }, []);
 
   useEffect(() => {
@@ -1807,7 +1781,7 @@ function App() {
                                 <select
                                   className="control-select"
                                   value={videoResolution}
-                                  onChange={e => setVideoResolution(e.target.value as any)}
+                                  onChange={e => setVideoResolution(e.target.value as VideoResolution)}
                                   disabled={recording}
                                 >
                                   <option value="fullscreen">Max available</option>
@@ -2101,7 +2075,7 @@ function App() {
                                 />
                                 <span className="device-label">{device.label || "Camera"}</span>
                                 <span className="device-permission">
-                                  {recordOptions.cameraIds.includes(device.deviceId) && cameraPermission === "granted" ? ": granted" : ""}
+                                  {recordOptions.cameraIds.includes(device.deviceId) && permissionStatus.camera === "granted" ? ": granted" : ""}
                                 </span>
                               </label>
                               {/* Camera resolution dropdown */}
@@ -2163,10 +2137,6 @@ function App() {
               </button>
             </div>
           </div>
-        )}
-
-        {isConverting && (
-          <div className="converting-text">Converting... Please wait.</div>
         )}
 
         {recording && (
@@ -2273,7 +2243,6 @@ function App() {
                 <VideoPreview 
                   src={videoUrls['camera_' + camId]} 
                   title={`${device.label || 'Camera'}`}
-                  deviceId={camId}
                 />
                 <div className="save-button-container">
                   <button
