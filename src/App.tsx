@@ -187,8 +187,9 @@ const projectTimeline = [
 const technicalWins = [
   'Frontend-only capture flow: files are created in the browser session and saved or shared only when the user chooses.',
   'Separate screen, camera, and mic outputs with per-source save/share actions and generated filenames.',
+  'Multiple screen slots can be captured as separate files through repeated browser display-picker prompts.',
   'Screen and camera resolution controls, including camera capability checks deferred until users opt into camera access.',
-  'Microphone capture requests echo cancellation and noise suppression; manual gain controls are reserved for the next functional pass.',
+  'Microphone capture includes gain, echo cancellation, noise suppression, auto gain, and per-device audio-only outputs.',
 ];
 
 const stackDetails = [
@@ -209,6 +210,270 @@ const toolNotes = [
 ];
 
 const githubUrl = 'https://github.com/Tomaski47/scrrec-app';
+
+type ScreenDevice = {
+  deviceId: string;
+  label: string;
+};
+
+type PermissionTarget = 'all' | 'audio' | 'video';
+const defaultAudioDeviceId = 'default';
+const unlockAudioDeviceId = '__allow_microphone_access__';
+const genericAudioDeviceId = '__generic_microphone__';
+const genericFrontCameraId = '__front_camera__';
+const genericRearCameraId = '__rear_camera__';
+const genericCameraId = '__camera__';
+
+const createSyntheticAudioDevice = (deviceId: string, label: string) => ({
+  deviceId,
+  groupId: '',
+  kind: 'audioinput',
+  label,
+  toJSON: () => ({}),
+} as MediaDeviceInfo);
+
+const copyMediaDevice = (
+  device: MediaDeviceInfo,
+  overrides: Partial<Pick<MediaDeviceInfo, 'deviceId' | 'groupId' | 'kind' | 'label'>> = {}
+) => ({
+  deviceId: overrides.deviceId ?? device.deviceId ?? '',
+  groupId: overrides.groupId ?? device.groupId ?? '',
+  kind: overrides.kind ?? device.kind,
+  label: overrides.label ?? device.label ?? '',
+  toJSON: () => ({}),
+} as MediaDeviceInfo);
+
+const getDeviceIdentity = (device: MediaDeviceInfo, index: number) => (
+  device.deviceId || `${device.kind}-${device.groupId || 'unknown'}-${index}`
+);
+
+const getDeviceDedupeKey = (device: MediaDeviceInfo) => (
+  device.deviceId || `${device.kind}-${device.groupId || 'unknown'}`
+);
+
+const dedupeMediaDevices = (devices: MediaDeviceInfo[]) => {
+  const seen = new Set<string>();
+
+  return devices.filter((device) => {
+    if (!device.deviceId) return true;
+
+    const identity = getDeviceDedupeKey(device);
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
+};
+
+const isBuiltInMic = (device: MediaDeviceInfo) => {
+  const label = `${device.label} ${device.deviceId}`.toLowerCase();
+  return label.includes('built-in') ||
+    label.includes('internal') ||
+    label.includes('macbook');
+};
+
+const getBuiltInMicId = (devices: MediaDeviceInfo[]) => {
+  const builtInMic = devices.find(isBuiltInMic);
+
+  return builtInMic?.deviceId ?? '';
+};
+
+const getMicDisplayLabel = (device: MediaDeviceInfo, index: number) => {
+  const rawLabel = (device.label || '').trim();
+  const deviceId = (device.deviceId || '').toLowerCase();
+
+  if (deviceId === 'default') {
+    if (rawLabel.toLowerCase().startsWith('default')) {
+      const routedDevice = rawLabel.replace(/^default\s*[-:]\s*/i, '').trim();
+      return routedDevice ? `System default (${routedDevice})` : 'System default microphone';
+    }
+    return rawLabel || 'System default microphone';
+  }
+
+  if (deviceId === 'communications') {
+    if (rawLabel.toLowerCase().startsWith('communications')) {
+      const routedDevice = rawLabel.replace(/^communications\s*[-:]\s*/i, '').trim();
+      return routedDevice ? `Communications (${routedDevice})` : 'Communications microphone';
+    }
+    return rawLabel || 'Communications microphone';
+  }
+
+  return rawLabel || `Microphone ${index + 1}`;
+};
+
+const getMicDeviceNote = (device: MediaDeviceInfo) => {
+  const deviceId = (device.deviceId || '').toLowerCase();
+  if (deviceId === unlockAudioDeviceId) return 'unlock first';
+  if (deviceId === genericAudioDeviceId) return 'uses browser default';
+  if (!deviceId) return 'not selectable';
+  if (deviceId === 'default') return 'uses OS default';
+  if (deviceId === 'communications') return 'uses communications default';
+  return '';
+};
+
+const getMicSortRank = (device: MediaDeviceInfo) => {
+  const deviceId = (device.deviceId || '').toLowerCase();
+  if (deviceId === 'default') return 0;
+  if (isBuiltInMic(device)) return 1;
+  if (deviceId === genericAudioDeviceId) return 2;
+  if (deviceId === 'communications') return 3;
+  if (deviceId === unlockAudioDeviceId) return 5;
+  if (!deviceId) return 6;
+  return 4;
+};
+
+const micNeedsExplicitPermission = (device: MediaDeviceInfo) => {
+  const deviceId = (device.deviceId || '').toLowerCase();
+  return !deviceId;
+};
+
+const getPreferredMicId = (devices: MediaDeviceInfo[]) => {
+  const selectableDevices = devices.filter(device => (
+    !micNeedsExplicitPermission(device) &&
+    device.deviceId !== unlockAudioDeviceId
+  ));
+  const defaultMic = selectableDevices.find(device => (
+    (device.deviceId || '').toLowerCase() === defaultAudioDeviceId
+  ));
+  const realSelectableDevices = selectableDevices.filter(device => device.deviceId !== genericAudioDeviceId);
+  const builtInMicId = getBuiltInMicId(realSelectableDevices);
+  const firstSelectableMic = realSelectableDevices.find(device => device.deviceId);
+  const genericMic = selectableDevices.find(device => device.deviceId === genericAudioDeviceId);
+
+  return defaultMic?.deviceId || builtInMicId || firstSelectableMic?.deviceId || genericMic?.deviceId || '';
+};
+
+const reconcileSelectedMicIds = (devices: MediaDeviceInfo[], currentIds: string[]) => {
+  const refreshedMicIds = new Set(
+    devices
+      .filter(device => !micNeedsExplicitPermission(device) && !isMicUnlockId(device.deviceId))
+      .map(device => device.deviceId)
+  );
+  const preferredMicId = getPreferredMicId(devices);
+  const retainedMicIds = currentIds.filter(id => (
+    refreshedMicIds.has(id) && !isMicUnlockId(id)
+  ));
+
+  if (
+    retainedMicIds.some(isGenericMicId) &&
+    preferredMicId &&
+    !isGenericMicId(preferredMicId) &&
+    !isMicUnlockId(preferredMicId)
+  ) {
+    return [
+      preferredMicId,
+      ...retainedMicIds.filter(id => !isGenericMicId(id) && id !== preferredMicId),
+    ];
+  }
+
+  return retainedMicIds;
+};
+
+const normalizeAudioDevices = (devices: MediaDeviceInfo[], hasAudioAccess: boolean) => {
+  const labeledDevices = dedupeMediaDevices(devices.map((device, idx) => (
+    copyMediaDevice(device, { label: getMicDisplayLabel(device, idx) })
+  )));
+  const selectableDevices = labeledDevices.filter(device => device.deviceId);
+  const unavailableDevices = labeledDevices.filter(device => !device.deviceId && device.label);
+
+  if (selectableDevices.length > 0) {
+    const hasDefaultAlias = selectableDevices.some(device => (
+      device.deviceId === defaultAudioDeviceId || device.deviceId === genericAudioDeviceId
+    ));
+    const selectableList = [
+      ...selectableDevices,
+      ...(hasAudioAccess && !hasDefaultAlias
+        ? [createSyntheticAudioDevice(genericAudioDeviceId, 'Browser default microphone')]
+        : []),
+    ].sort((a, b) => getMicSortRank(a) - getMicSortRank(b));
+
+    return [
+      ...selectableList,
+      ...unavailableDevices,
+    ];
+  }
+
+  if (!hasAudioAccess) {
+    return [
+      createSyntheticAudioDevice(
+        unlockAudioDeviceId,
+        'Allow microphone access'
+      ),
+    ];
+  }
+
+  return [
+    createSyntheticAudioDevice(genericAudioDeviceId, 'Browser default microphone'),
+    ...unavailableDevices,
+  ];
+};
+
+const isGenericMicId = (micId: string) => micId === genericAudioDeviceId;
+const isMicUnlockId = (micId: string) => micId === unlockAudioDeviceId;
+
+const isGenericCameraId = (cameraId: string) => (
+  cameraId === genericFrontCameraId ||
+  cameraId === genericRearCameraId ||
+  cameraId === genericCameraId
+);
+
+const getCameraFallbackId = (device: MediaDeviceInfo) => {
+  const label = `${device.label || ''} ${device.deviceId || ''}`.toLowerCase();
+  if (label.includes('front') || label.includes('user') || label.includes('facetime')) return genericFrontCameraId;
+  if (label.includes('rear') || label.includes('back') || label.includes('environment')) return genericRearCameraId;
+  return genericCameraId;
+};
+
+const getCameraFallbackLabel = (cameraId: string) => {
+  if (cameraId === genericFrontCameraId) return 'Front Camera';
+  if (cameraId === genericRearCameraId) return 'Rear Camera';
+  return 'Camera';
+};
+
+const shouldUseSingleMobileCamera = (cameraIds: string[]) => (
+  cameraIds.some(isGenericCameraId)
+);
+
+const buildNextCameraIds = (currentIds: string[], nextId: string, checked: boolean) => {
+  if (!checked) {
+    return currentIds.filter(id => id !== nextId);
+  }
+
+  if (shouldUseSingleMobileCamera([...currentIds, nextId])) {
+    return [nextId];
+  }
+
+  return currentIds.includes(nextId) ? currentIds : [...currentIds, nextId];
+};
+
+const normalizeCameraDevices = (devices: MediaDeviceInfo[]) => {
+  const seen = new Set<string>();
+
+  return devices
+    .map((device) => {
+      if (device.deviceId) return device;
+      const fallbackId = getCameraFallbackId(device);
+      return copyMediaDevice(device, {
+        deviceId: fallbackId,
+        label: getCameraFallbackLabel(fallbackId),
+      });
+    })
+    .filter((device) => {
+      const identity = device.deviceId || device.label || device.groupId;
+      if (seen.has(identity)) return false;
+      seen.add(identity);
+      return true;
+    });
+};
+
+const createScreenDevice = (slotNumber: number): ScreenDevice => ({
+  deviceId: `screen_${slotNumber}`,
+  label: `Screen ${slotNumber}`,
+});
+
+const getScreenSlotNumber = (screenId: string): number => {
+  const match = screenId.match(/(\d+)$/);
+  return match ? Number(match[1]) : 1;
+};
 
 function App() {
   // Dark mode state
@@ -238,23 +503,42 @@ function App() {
     mic: false,
     micIds: [] as string[],
   });
+  const [audioProcessing, setAudioProcessing] = useState({
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    gain: 1,
+  });
+  const [micLevelDb, setMicLevelDb] = useState<number | null>(null);
+  const [micLevelPercent, setMicLevelPercent] = useState(0);
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [cameraPermission, setCameraPermission] = useState<string>("unknown");
   const [fullScreenResolution, setFullScreenResolution] = useState<string>('');
   const [actualScreenResolution, setActualScreenResolution] = useState("");
-  const [screenDevices, setScreenDevices] = useState<{ deviceId: string; label?: string; width?: number; height?: number }[]>([]);
+  const [screenDevices, setScreenDevices] = useState<ScreenDevice[]>([createScreenDevice(1)]);
   const [availableScreenResolutions, setAvailableScreenResolutions] = useState<string[]>([]);
   const [maxResolutionLabel, setMaxResolutionLabel] = useState("1080p");
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordingSize, setRecordingSize] = useState(0);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
-  const [hasRequestedPermissions, setHasRequestedPermissions] = useState(false);
+  const [hasRequestedAudioPermission, setHasRequestedAudioPermission] = useState(false);
+  const [hasRequestedVideoPermission, setHasRequestedVideoPermission] = useState(false);
 
   // Refs
   const ffmpeg = useRef<any>(null);
   const activeStreamsRef = useRef<MediaStream[]>([]);
+  const audioContextsRef = useRef<AudioContext[]>([]);
+  const audioGainRef = useRef(audioProcessing.gain);
+  const micMeterRequestRef = useRef(0);
+  const micMeterRef = useRef<{
+    stream: MediaStream;
+    context: AudioContext;
+    analyser: AnalyserNode;
+    source: MediaStreamAudioSourceNode;
+    rafId: number | null;
+  } | null>(null);
   const chunks = useRef<{[key:string]: Blob[]}>({});
   const clearConfirmationRef = useRef<HTMLDivElement>(null);
 
@@ -283,10 +567,10 @@ function App() {
   }, [darkMode]);
 
   // Download helper function
-  const handleDownload = (blobOrChunks: Blob[] | Blob, fileName: string, deviceName?: string) => {
+  const handleDownload = (blobOrChunks: Blob[] | Blob, fileName: string, deviceName?: string, mimeType = 'video/webm') => {
     let blob: Blob;
     if (Array.isArray(blobOrChunks)) {
-      blob = new Blob(blobOrChunks, { type: 'video/webm' });
+      blob = new Blob(blobOrChunks, { type: mimeType });
     } else {
       blob = blobOrChunks;
     }
@@ -340,6 +624,19 @@ function App() {
     for (const camera of devices) {
       if (availableCameraResolutions[camera.deviceId]) continue;
 
+      if (isGenericCameraId(camera.deviceId)) {
+        const fallbackResolutions = ['1080p', '720p', '480p', '360p'];
+        setAvailableCameraResolutions(prev => ({
+          ...prev,
+          [camera.deviceId]: fallbackResolutions
+        }));
+        setCameraResolutions(prev => ({
+          ...prev,
+          [camera.deviceId]: prev[camera.deviceId] || '1080p'
+        }));
+        continue;
+      }
+
       const resolutions = await getCameraCapabilities(camera.deviceId);
       setAvailableCameraResolutions(prev => ({
         ...prev,
@@ -353,16 +650,48 @@ function App() {
   };
 
   // Get available devices without requesting permissions
-  const getAvailableDevices = async (requestPermissions = false) => {
+  const getAvailableDevices = async (
+    requestPermissions = false,
+    permissionTarget: PermissionTarget = 'all',
+    hasFreshAudioAccess = false,
+    forcePermissionRefresh = false
+  ) => {
     try {
-      if (requestPermissions && !hasRequestedPermissions) {
+      const needsAudio = permissionTarget === 'all' || permissionTarget === 'audio';
+      const needsVideo = permissionTarget === 'all' || permissionTarget === 'video';
+      const alreadyRequested =
+        (!needsAudio || hasRequestedAudioPermission) &&
+        (!needsVideo || hasRequestedVideoPermission);
+
+      let grantedThisRequest = {
+        audio: false,
+        video: false,
+      };
+
+      if (requestPermissions && (!alreadyRequested || forcePermissionRefresh)) {
         // Only request permissions when explicitly needed
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: needsVideo,
+            audio: needsAudio,
+          });
           stream.getTracks().forEach(track => track.stop());
-          setHasRequestedPermissions(true);
+          if (needsAudio) {
+            setHasRequestedAudioPermission(true);
+            grantedThisRequest.audio = true;
+          }
+          if (needsVideo) {
+            setHasRequestedVideoPermission(true);
+            grantedThisRequest.video = true;
+          }
+          setPermissionStatus(prev => ({
+            ...prev,
+            ...(needsAudio ? { microphone: 'granted' } : {}),
+            ...(needsVideo ? { camera: 'granted' } : {}),
+          }));
         } catch (err) {
           console.log('Permission denied or not available');
+          await checkPermissions();
         }
       }
 
@@ -383,23 +712,23 @@ function App() {
         if (!label || label.trim() === "") {
           if (deviceIdLower.includes('front') || deviceIdLower.includes('user')) {
             label = `Front Camera`;
-            frontCameras.push({ ...device, label });
+            frontCameras.push(copyMediaDevice(device, { label }));
           } else if (deviceIdLower.includes('back') || deviceIdLower.includes('environment')) {
             label = `Rear Camera`;
-            rearCameras.push({ ...device, label });
+            rearCameras.push(copyMediaDevice(device, { label }));
           } else {
             label = `Camera ${idx + 1}`;
-            unknownCameras.push({ ...device, label });
+            unknownCameras.push(copyMediaDevice(device, { label }));
           }
         } else {
           // Categorize based on existing labels
           const labelLower = label.toLowerCase();
           if (labelLower.includes('front') || labelLower.includes('facing user') || labelLower.includes('facetime')) {
-            frontCameras.push({ ...device, label: 'Front Camera' });
+            frontCameras.push(copyMediaDevice(device, { label: 'Front Camera' }));
           } else if (labelLower.includes('back') || labelLower.includes('rear') || labelLower.includes('facing environment')) {
-            rearCameras.push({ ...device, label: 'Rear Camera' });
+            rearCameras.push(copyMediaDevice(device, { label: 'Rear Camera' }));
           } else {
-            unknownCameras.push(device);
+            unknownCameras.push(copyMediaDevice(device));
           }
         }
       });
@@ -407,8 +736,7 @@ function App() {
       // Number duplicate labels
       const numberDuplicates = (cameras: MediaDeviceInfo[], baseLabel: string) => {
         if (cameras.length > 1) {
-          return cameras.map((cam, idx) => ({
-            ...cam,
+          return cameras.map((cam, idx) => copyMediaDevice(cam, {
             label: `${baseLabel} ${idx + 1}`
           }));
         }
@@ -418,33 +746,24 @@ function App() {
       const numberedFront = numberDuplicates(frontCameras, 'Front Camera');
       const numberedRear = numberDuplicates(rearCameras, 'Rear Camera');
       
-      videoDevices = [...numberedFront, ...numberedRear, ...unknownCameras];
+      videoDevices = normalizeCameraDevices(dedupeMediaDevices([...numberedFront, ...numberedRear, ...unknownCameras]));
       
-      // Enhanced microphone labeling
-      audioDevices = audioDevices.map((device, idx) => {
-        let label = device.label;
-        if (!label || label.trim() === "") {
-          label = `Microphone ${idx + 1}`;
-        } else {
-          // Try to identify front/rear mics
-          const labelLower = label.toLowerCase();
-          if (labelLower.includes('front') || labelLower.includes('bottom')) {
-            label = 'Front Microphone';
-          } else if (labelLower.includes('back') || labelLower.includes('rear') || labelLower.includes('top')) {
-            label = 'Rear Microphone';
-          }
-        }
-        return { ...device, label };
-      });
+      audioDevices = normalizeAudioDevices(
+        audioDevices,
+        hasFreshAudioAccess || grantedThisRequest.audio || hasRequestedAudioPermission || permissionStatus.microphone === 'granted'
+      );
       
       setCameraDevices(videoDevices);
       setMicDevices(audioDevices);
       
-      if (requestPermissions || hasRequestedPermissions) {
+      if (requestPermissions || hasRequestedVideoPermission) {
         await loadCameraResolutions(videoDevices);
       }
+
+      return { videoDevices, audioDevices };
     } catch (error) {
       console.error('Error enumerating devices:', error);
+      return { videoDevices: [] as MediaDeviceInfo[], audioDevices: [] as MediaDeviceInfo[] };
     }
   };
 
@@ -596,6 +915,13 @@ function App() {
     });
     activeStreamsRef.current = [];
 
+    audioContextsRef.current.forEach((context) => {
+      if (context.state !== 'closed') {
+        context.close().catch(err => console.warn('Error closing audio context:', err));
+      }
+    });
+    audioContextsRef.current = [];
+
     // Clean up old video URLs to free memory
     Object.values(videoUrls).forEach(url => {
       if (url) URL.revokeObjectURL(url);
@@ -611,9 +937,15 @@ function App() {
 
   // Get camera constraints based on resolution
   const getCameraConstraints = (deviceId: string, resolution: string) => {
-    const constraints: any = {
-      deviceId: { exact: deviceId }
-    };
+    const constraints: any = {};
+
+    if (deviceId === genericFrontCameraId) {
+      constraints.facingMode = { ideal: 'user' };
+    } else if (deviceId === genericRearCameraId) {
+      constraints.facingMode = { ideal: 'environment' };
+    } else if (!isGenericCameraId(deviceId)) {
+      constraints.deviceId = { exact: deviceId };
+    }
     
     switch (resolution) {
       case '4K':
@@ -645,12 +977,238 @@ function App() {
     return constraints;
   };
 
+  const addScreenSource = () => {
+    if (recording) return;
+    const nextSlotNumber = screenDevices.length + 1;
+    const nextDevice = createScreenDevice(nextSlotNumber);
+    setScreenDevices(prev => [...prev, nextDevice]);
+    setRecordOptions(prev => ({
+      ...prev,
+      screenIds: [...prev.screenIds, nextDevice.deviceId],
+    }));
+  };
+
+  const removeLastScreenSource = () => {
+    if (recording || screenDevices.length <= 1) return;
+    const lastDevice = screenDevices[screenDevices.length - 1];
+    setScreenDevices(prev => prev.slice(0, -1));
+    setRecordOptions(prev => ({
+      ...prev,
+      screenIds: prev.screenIds.filter(id => id !== lastDevice.deviceId),
+    }));
+  };
+
+  const generateScreenFilename = (screenId: string, resolution?: string) => {
+    const baseName = generateFilename("screen", resolution);
+    return baseName.replace(/^screen/, `screen${getScreenSlotNumber(screenId)}`);
+  };
+
+  const getMicConstraints = (micId: string): MediaTrackConstraints => {
+    const constraints: MediaTrackConstraints = {
+      echoCancellation: audioProcessing.echoCancellation,
+      noiseSuppression: audioProcessing.noiseSuppression,
+      autoGainControl: audioProcessing.autoGainControl,
+    };
+
+    if (micId && !isGenericMicId(micId) && micId !== defaultAudioDeviceId) {
+      constraints.deviceId = { exact: micId };
+    }
+
+    return constraints;
+  };
+
+  const requestGenericMicAccess = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: getMicConstraints(genericAudioDeviceId),
+        video: false,
+      });
+      stream.getTracks().forEach(track => track.stop());
+      setHasRequestedAudioPermission(true);
+      setPermissionStatus(prev => ({
+        ...prev,
+        microphone: 'granted',
+      }));
+      return true;
+    } catch (err: any) {
+      console.warn('Could not unlock microphone access:', err);
+      await checkPermissions();
+      setPermissionError('Could not get microphone access. Check browser and system microphone permissions, then try selecting the microphone again.');
+      return false;
+    }
+  };
+
+  const applyMicGain = (stream: MediaStream) => {
+    if (audioProcessing.gain === 1) return stream;
+
+    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextCtor) return stream;
+
+    const context = new AudioContextCtor();
+    const source = context.createMediaStreamSource(stream);
+    const gainNode = context.createGain();
+    const destination = context.createMediaStreamDestination();
+
+    gainNode.gain.value = audioProcessing.gain;
+    source.connect(gainNode);
+    gainNode.connect(destination);
+    audioContextsRef.current.push(context);
+
+    return destination.stream;
+  };
+
+  const stopMicMeter = (invalidatePendingRequest = true) => {
+    if (invalidatePendingRequest) {
+      micMeterRequestRef.current += 1;
+    }
+
+    const meter = micMeterRef.current;
+    if (meter?.rafId) {
+      cancelAnimationFrame(meter.rafId);
+    }
+    meter?.stream.getTracks().forEach(track => track.stop());
+    if (meter?.context.state !== 'closed') {
+      meter?.context.close().catch(err => console.warn('Error closing mic meter context:', err));
+    }
+
+    micMeterRef.current = null;
+    setMicLevelDb(null);
+    setMicLevelPercent(0);
+  };
+
+  const startMicMeter = async (micId: string) => {
+    const requestId = micMeterRequestRef.current + 1;
+    micMeterRequestRef.current = requestId;
+    stopMicMeter(false);
+
+    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextCtor) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: getMicConstraints(micId),
+        video: false,
+      });
+
+      if (requestId !== micMeterRequestRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
+      const context = new AudioContextCtor() as AudioContext;
+      const source = context.createMediaStreamSource(stream);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0;
+      source.connect(analyser);
+
+      const data = new Float32Array(analyser.fftSize);
+      const meter = {
+        stream,
+        context,
+        analyser,
+        source,
+        rafId: null as number | null,
+      };
+      micMeterRef.current = meter;
+
+      const updateMeter = () => {
+        analyser.getFloatTimeDomainData(data);
+        let peak = 0;
+        for (let i = 0; i < data.length; i += 1) {
+          peak = Math.max(peak, Math.abs(data[i]));
+        }
+
+        const adjustedPeak = Math.min(1, peak * audioGainRef.current);
+        const db = adjustedPeak > 0 ? Math.max(-60, 20 * Math.log10(adjustedPeak)) : -60;
+        const percent = Math.min(100, Math.max(0, ((db + 60) / 60) * 100));
+
+        setMicLevelDb(Number.isFinite(db) ? Math.round(db) : -60);
+        setMicLevelPercent(percent);
+        meter.rafId = requestAnimationFrame(updateMeter);
+      };
+
+      updateMeter();
+    } catch (err) {
+      console.warn('Could not start microphone level meter:', err);
+      setMicLevelDb(null);
+      setMicLevelPercent(0);
+    }
+  };
+
+  const resolveSelectableMic = (device: MediaDeviceInfo) => {
+    return device;
+  };
+
+  const getMicSelectionId = (device: MediaDeviceInfo) => {
+    return device.deviceId || '';
+  };
+
+  const getMicNote = (device: MediaDeviceInfo) => {
+    return getMicDeviceNote(device);
+  };
+
+  const handleMicDeviceChange = async (device: MediaDeviceInfo, shouldSelect: boolean) => {
+    if (recording) return;
+
+    let selectableMic = shouldSelect ? resolveSelectableMic(device) : device;
+    let selectableMicId = selectableMic?.deviceId || getMicSelectionId(device);
+
+    if (shouldSelect && isMicUnlockId(selectableMicId)) {
+      const didUnlockMic = await requestGenericMicAccess();
+      if (!didUnlockMic) return;
+
+      await getAvailableDevices(false, 'audio', true);
+      setRecordOptions(prev => ({
+        ...prev,
+        mic: true,
+        micIds: prev.micIds.filter(id => !isMicUnlockId(id)),
+      }));
+      stopMicMeter();
+      return;
+    }
+
+    if (!selectableMicId || isMicUnlockId(selectableMicId) || micNeedsExplicitPermission(device)) {
+      const attemptedMic = device.label || 'that microphone';
+      setPermissionError(`"${attemptedMic}" is visible, but this browser did not expose a selectable device ID for it. Use Browser default microphone for the current OS/default input, or choose a named mic with a real device ID.`);
+      return;
+    }
+
+    let micIds = [...recordOptions.micIds];
+    if (shouldSelect) {
+      if (selectableMicId !== genericAudioDeviceId) {
+        micIds = micIds.filter(id => !isGenericMicId(id));
+      }
+      if (!micIds.includes(selectableMicId)) micIds.push(selectableMicId);
+    } else {
+      micIds = micIds.filter(id => id !== selectableMicId);
+    }
+
+    setRecordOptions({ ...recordOptions, mic: true, micIds });
+    if (micIds.length > 0) {
+      void startMicMeter(shouldSelect ? selectableMicId : micIds[0]);
+    } else {
+      stopMicMeter();
+    }
+  };
+
   // Start recording
   const startRecording = async () => {
     try {
-      // Request permissions if not already done
-      if (!hasRequestedPermissions) {
-        await getAvailableDevices(true);
+      stopMicMeter();
+
+      const needsMicPermission = recordOptions.mic && recordOptions.micIds.length > 0;
+      const needsCameraPermission = recordOptions.cameraIds.length > 0;
+
+      if (needsMicPermission || needsCameraPermission) {
+        const permissionTarget: PermissionTarget = needsMicPermission && needsCameraPermission
+          ? 'all'
+          : needsMicPermission
+            ? 'audio'
+            : 'video';
+        await getAvailableDevices(true, permissionTarget);
+      } else {
+        await getAvailableDevices(false);
       }
 
       cleanupRecording();
@@ -674,19 +1232,31 @@ function App() {
 
       const streams: {[key:string]: MediaStream} = {};
       const streamKeys: string[] = [];
+      const selectedScreenIds = recordOptions.screenIds.filter(screenId =>
+        screenDevices.some(device => device.deviceId === screenId)
+      );
 
-      // Get screen stream if selected
-      if (recordOptions.screenIds.includes('main') && supportsDisplayMedia && !isMobile) {
-        try {
-          streams.screen = await (navigator.mediaDevices as any).getDisplayMedia({
-            video: getResolutionConstraints(),
-          });
-          activeStreamsRef.current.push(streams.screen);
-          streamKeys.push('screen');
-        } catch (err: any) {
-          setPermissionError('Could not get screen stream.\nError: ' + (err?.message || err));
+      // Get screen streams if selected. Browsers expose screens through the picker, not enumeration.
+      if (selectedScreenIds.length > 0) {
+        if (!supportsDisplayMedia || isMobile) {
+          setPermissionError('Screen recording is not supported in this browser or device.');
           cleanupRecording();
           return;
+        }
+
+        for (const screenId of selectedScreenIds) {
+          const screenLabel = screenDevices.find(device => device.deviceId === screenId)?.label || 'Screen';
+          try {
+            streams[screenId] = await (navigator.mediaDevices as any).getDisplayMedia({
+              video: getResolutionConstraints(),
+            });
+            activeStreamsRef.current.push(streams[screenId]);
+            streamKeys.push(screenId);
+          } catch (err: any) {
+            setPermissionError(`Could not get ${screenLabel} stream.\nError: ` + (err?.message || err));
+            cleanupRecording();
+            return;
+          }
         }
       }
 
@@ -696,15 +1266,15 @@ function App() {
         for (const micId of recordOptions.micIds) {
           try {
             const micStream = await navigator.mediaDevices.getUserMedia({
-              audio: {
-                deviceId: { exact: micId },
-                echoCancellation: true,
-                noiseSuppression: true,
-              },
+              audio: getMicConstraints(micId),
               video: false,
             });
-            micStreams['mic_' + micId] = micStream;
             activeStreamsRef.current.push(micStream);
+            const processedMicStream = applyMicGain(micStream);
+            if (processedMicStream !== micStream) {
+              activeStreamsRef.current.push(processedMicStream);
+            }
+            micStreams['mic_' + micId] = processedMicStream;
           } catch (err: any) {
             setPermissionError('Could not get microphone: ' + (err?.message || err));
             cleanupRecording();
@@ -715,6 +1285,15 @@ function App() {
 
       // Get camera streams if selected
       if (recordOptions.cameraIds && recordOptions.cameraIds.length > 0) {
+        if (
+          shouldUseSingleMobileCamera(recordOptions.cameraIds) &&
+          recordOptions.cameraIds.length > 1
+        ) {
+          setPermissionError('Mobile browsers usually allow one active camera stream at a time. Choose either Front Camera or Rear Camera, then start recording.');
+          cleanupRecording();
+          return;
+        }
+
         for (const camId of recordOptions.cameraIds) {
           try {
             const resolution = cameraResolutions[camId] || '1080p';
@@ -735,7 +1314,7 @@ function App() {
       }
 
       if (
-        (!recordOptions.screenIds || !recordOptions.screenIds.includes('main')) &&
+        selectedScreenIds.length === 0 &&
         (!recordOptions.cameraIds || recordOptions.cameraIds.length === 0) &&
         (!recordOptions.mic || !recordOptions.micIds || recordOptions.micIds.length === 0)
       ) {
@@ -781,35 +1360,35 @@ function App() {
         recorder.start(1000);
       }
 
-      // For screen stream
-      if (recordOptions.screenIds.includes('main') && streams.screen) {
-        let finalStream = streams.screen;
+      // For each screen stream
+      for (const screenKey of selectedScreenIds.filter(screenId => streams[screenId])) {
+        let finalStream = streams[screenKey];
         if (recordOptions.mic && recordOptions.micIds && recordOptions.micIds.length > 0) {
           const audioTracks = recordOptions.micIds.flatMap(mid =>
             micStreams['mic_' + mid]?.getAudioTracks() ?? []
           );
           const combinedStream = new MediaStream([
-            ...streams.screen.getVideoTracks(),
+            ...streams[screenKey].getVideoTracks(),
             ...audioTracks,
           ]);
           finalStream = combinedStream;
           activeStreamsRef.current.push(combinedStream);
         }
         const recorderOptions = getRecorderOptions(true, recordOptions.mic);
-        newChunks['screen'] = [];
+        newChunks[screenKey] = [];
         const recorder = new MediaRecorder(finalStream, recorderOptions);
         recorder.ondataavailable = (e) => {
           if (e.data.size > 0) {
-            newChunks['screen'].push(e.data);
+            newChunks[screenKey].push(e.data);
             setRecordingSize(prevSize => prevSize + e.data.size);
           }
         };
         recorder.onstop = () => {
-          const videoBlob = new Blob(newChunks['screen'], { type: 'video/webm' });
-          newVideoUrls['screen'] = URL.createObjectURL(videoBlob);
-          setVideoUrls(prev => ({ ...prev, screen: newVideoUrls['screen'] }));
+          const videoBlob = new Blob(newChunks[screenKey], { type: 'video/webm' });
+          newVideoUrls[screenKey] = URL.createObjectURL(videoBlob);
+          setVideoUrls(prev => ({ ...prev, [screenKey]: newVideoUrls[screenKey] }));
         };
-        newMediaRecorders['screen'] = recorder;
+        newMediaRecorders[screenKey] = recorder;
         recorder.start(1000);
       }
 
@@ -849,9 +1428,9 @@ function App() {
 
   // Stop recording
   const stopRecording = () => {
-    if (recordOptions.screenIds.includes('main')) {
-      setSavedStatus(prev => ({ ...prev, screen: false }));
-    }
+    recordOptions.screenIds.forEach(screenId => {
+      setSavedStatus(prev => ({ ...prev, [screenId]: false }));
+    });
     recordOptions.cameraIds.forEach(camId => {
       setSavedStatus(prev => ({ ...prev, ['camera_' + camId]: false }));
     });
@@ -962,6 +1541,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    audioGainRef.current = audioProcessing.gain;
+  }, [audioProcessing.gain]);
+
+  useEffect(() => () => stopMicMeter(), []);
+
+  useEffect(() => {
     setSupportsDisplayMedia(typeof (navigator.mediaDevices as any).getDisplayMedia === 'function');
   }, []);
 
@@ -972,19 +1557,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const width = window.screen.width;
-    const height = window.screen.height;
-    setScreenDevices([
-      {
-        deviceId: "main",
-        label: actualScreenResolution
-          ? `Screen (${actualScreenResolution})`
-          : "Screen (Detecting...)",
-        width,
-        height,
-      }
-    ]);
-  }, [actualScreenResolution]);
+    setScreenDevices(prev => (
+      prev.length > 0 ? prev : [createScreenDevice(1)]
+    ));
+  }, []);
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -1152,7 +1728,9 @@ function App() {
                             if (recording) return; // Prevent changes during recording
                             let screenIds = recordOptions.screenIds;
                             if (e.target.checked) {
-                              screenIds = ['main'];
+                              screenIds = screenDevices.length > 0
+                                ? screenDevices.map(device => device.deviceId)
+                                : [createScreenDevice(1).deviceId];
                             } else {
                               screenIds = [];
                             }
@@ -1167,40 +1745,52 @@ function App() {
                         <div className="device-submenu">
                           {!isMobile ? (
                             <>
-                              {screenDevices.map((device, index) => {
-                                let label = "";
-                                if (device.deviceId === "main" && actualScreenResolution) {
-                                  label = `Screen (${actualScreenResolution})`;
-                                }
-                                return (
-                                  <label key={device.deviceId}>
-                                    <input
-                                      type="checkbox"
-                                      checked={recordOptions.screenIds.includes(device.deviceId)}
-                                      onChange={(e) => {
-                                        if (recording) return;
-                                        let screenIds = [...recordOptions.screenIds];
-                                        if (e.target.checked) {
-                                          if (!screenIds.includes(device.deviceId)) screenIds.push(device.deviceId);
-                                        } else {
-                                          screenIds = screenIds.filter((id) => id !== device.deviceId);
-                                        }
-                                        setRecordOptions({ ...recordOptions, screenIds });
-                                      }}
-                                      disabled={recording}
-                                      className="styled-checkbox"
-                                    />
-                                    <span className="device-label">
-                                      {label}
-                                      {recordOptions.screenIds.includes(device.deviceId) && (
-                                        <span className="device-permission">
-                                          : {permissionStatus.screen || 'TBD'}
-                                        </span>
-                                      )}
-                                    </span>
-                                  </label>
-                                );
-                              })}
+                              {screenDevices.map((device) => (
+                                <label key={device.deviceId}>
+                                  <input
+                                    type="checkbox"
+                                    checked={recordOptions.screenIds.includes(device.deviceId)}
+                                    onChange={(e) => {
+                                      if (recording) return;
+                                      let screenIds = [...recordOptions.screenIds];
+                                      if (e.target.checked) {
+                                        if (!screenIds.includes(device.deviceId)) screenIds.push(device.deviceId);
+                                      } else {
+                                        screenIds = screenIds.filter((id) => id !== device.deviceId);
+                                      }
+                                      setRecordOptions({ ...recordOptions, screenIds });
+                                    }}
+                                    disabled={recording}
+                                    className="styled-checkbox"
+                                  />
+                                  <span className="device-label">
+                                    {device.label}
+                                  </span>
+                                </label>
+                              ))}
+                              <div className="screen-slot-actions">
+                                <button
+                                  type="button"
+                                  className="mini-action"
+                                  onClick={addScreenSource}
+                                  disabled={recording}
+                                >
+                                  Add screen
+                                </button>
+                                {screenDevices.length > 1 && (
+                                  <button
+                                    type="button"
+                                    className="mini-action secondary"
+                                    onClick={removeLastScreenSource}
+                                    disabled={recording}
+                                  >
+                                    Remove screen
+                                  </button>
+                                )}
+                              </div>
+                              <p className="submenu-hint">
+                                Add one slot per display, then pick each exact screen in the browser prompt.
+                              </p>
                               {/* Resolution dropdown for screen */}
                               <div className="settings-row submenu-dropdown">
                                 <div className="settings-label">Resolution:</div>
@@ -1210,7 +1800,7 @@ function App() {
                                   onChange={e => setVideoResolution(e.target.value as any)}
                                   disabled={recording}
                                 >
-                                  <option value="fullscreen">Max ({actualScreenResolution})</option>
+                                  <option value="fullscreen">Max available</option>
                                   <option value="1080p">1080p</option>
                                   <option value="720p">720p</option>
                                   <option value="480p">480p</option>
@@ -1228,20 +1818,30 @@ function App() {
                     </div>
                     
                     {/* Mic */}
-                    <div className={`option-block${recordOptions.mic && micDevices.length > 0 ? ' has-submenu' : ''}`}>
+                    <div className={`option-block${recordOptions.mic ? ' has-submenu' : ''}`}>
                       <label className="options-checkbox">
                         <input
                           type="checkbox"
                           checked={recordOptions.mic}
-                          onChange={e => {
+                          onChange={async e => {
                             if (recording) return;
                             if (e.target.checked) {
-                              let micIds = recordOptions.micIds;
-                              if (micIds.length === 0 && micDevices.length > 0) {
-                                micIds = [micDevices[0].deviceId];
-                              }
+                              const refreshedDevices = await getAvailableDevices(false, 'audio');
+                              const availableMics = refreshedDevices.audioDevices.length > 0
+                                ? refreshedDevices.audioDevices
+                                : micDevices;
+                              const preferredMicId = getPreferredMicId(availableMics);
+                              const shouldAutoSelectMic = (
+                                preferredMicId &&
+                                !isGenericMicId(preferredMicId) &&
+                                !isMicUnlockId(preferredMicId)
+                              );
+                              const micIds = recordOptions.micIds.length > 0
+                                ? recordOptions.micIds
+                                : shouldAutoSelectMic ? [preferredMicId] : [];
                               setRecordOptions({ ...recordOptions, mic: true, micIds });
                             } else {
+                              stopMicMeter();
                               setRecordOptions({ ...recordOptions, mic: false, micIds: [] });
                             }
                           }}
@@ -1250,36 +1850,81 @@ function App() {
                         />
                         Mic
                       </label>
-                      {recordOptions.mic && micDevices.length > 0 && (
+                      {recordOptions.mic && (
                         <div className="device-submenu">
-                          {micDevices.map(device => (
-                            <label key={device.deviceId}>
+                          {micDevices.length > 0 ? micDevices.map((device, index) => (
+                            <label
+                              key={getDeviceIdentity(device, index)}
+                              className={micNeedsExplicitPermission(device) ? 'device-unavailable' : undefined}
+                            >
                               <input
                                 type="checkbox"
-                                checked={recordOptions.micIds.includes(device.deviceId)}
+                                checked={Boolean(getMicSelectionId(device)) && recordOptions.micIds.includes(getMicSelectionId(device))}
                                 onChange={e => {
-                                  if (recording) return;
-                                  let micIds = [...recordOptions.micIds];
-                                  if (e.target.checked) {
-                                    if (!micIds.includes(device.deviceId)) micIds.push(device.deviceId);
-                                  } else {
-                                    micIds = micIds.filter(id => id !== device.deviceId);
-                                  }
-                                  setRecordOptions({ ...recordOptions, micIds });
+                                  void handleMicDeviceChange(device, e.target.checked);
                                 }}
-                                disabled={recording}
+                                disabled={recording || micNeedsExplicitPermission(device)}
                                 className="styled-checkbox"
                               />
                               <span className="device-label">
-                                {device.label || `Mic ${device.deviceId.slice(-4)}`}
-                                {recordOptions.micIds.includes(device.deviceId) && (
+                                {device.label || (device.deviceId ? `Mic ${device.deviceId.slice(-4)}` : `Microphone ${index + 1}`)}
+                                {getMicNote(device) && (
+                                  <span className="device-permission">
+                                    : {getMicNote(device)}
+                                  </span>
+                                )}
+                                {Boolean(getMicSelectionId(device)) && recordOptions.micIds.includes(getMicSelectionId(device)) && (
                                   <span className="device-permission">
                                     : {permissionStatus.microphone || 'TBD'}
                                   </span>
                                 )}
                               </span>
                             </label>
-                          ))}
+                          )) : (
+                            <p className="submenu-hint">
+                              No microphone list yet. Refresh mics checks the browser list without opening a mic.
+                            </p>
+                          )}
+                          <div className="screen-slot-actions">
+                            <button
+                              type="button"
+                              className="mini-action"
+                              onClick={async () => {
+                                if (recording) return;
+                                const refreshedDevices = await getAvailableDevices(false, 'audio');
+                                setRecordOptions(prev => ({
+                                  ...prev,
+                                  mic: true,
+                                  micIds: reconcileSelectedMicIds(refreshedDevices.audioDevices, prev.micIds),
+                                }));
+                              }}
+                              disabled={recording}
+                            >
+                              Refresh mics
+                            </button>
+                            {/* Continuity/iPhone mics appeared during testing, but Chrome/macOS did not always expose stable IDs. Keep this as an optional scan path so the core mic flow stays stable. */}
+                            <button
+                              type="button"
+                              className="mini-action secondary"
+                              onClick={async () => {
+                                if (recording) return;
+                                const refreshedDevices = await getAvailableDevices(true, 'audio', true, true);
+                                setRecordOptions(prev => ({
+                                  ...prev,
+                                  mic: true,
+                                  micIds: reconcileSelectedMicIds(refreshedDevices.audioDevices, prev.micIds),
+                                }));
+                              }}
+                              disabled={recording}
+                            >
+                              Scan inputs
+                            </button>
+                          </div>
+                          <p className="submenu-hint">
+                            {isMobile
+                              ? 'Tap the phone microphone to allow browser mic access and start the level meter.'
+                              : 'Refresh is quiet. Scan inputs briefly opens mic access and may reveal Continuity, USB, or phone inputs when the browser exposes them.'}
+                          </p>
                           {/* Audio quality dropdown */}
                           <div className="settings-row submenu-dropdown">
                             <div className="settings-label">Quality:</div>
@@ -1294,6 +1939,82 @@ function App() {
                               <option value="best">Best (256kbps)</option>
                             </select>
                           </div>
+                          <div className="audio-processing-controls">
+                            <div className="settings-row submenu-dropdown gain-row">
+                              <div className="settings-label">Gain:</div>
+                              <div className="gain-control">
+                                <input
+                                  className="control-range"
+                                  type="range"
+                                  min="0.25"
+                                  max="2.5"
+                                  step="0.05"
+                                  value={audioProcessing.gain}
+                                  onChange={e => setAudioProcessing(prev => ({
+                                    ...prev,
+                                    gain: Number(e.target.value)
+                                  }))}
+                                  disabled={recording}
+                                  aria-label="Microphone gain"
+                                />
+                                <span className="gain-value">{Math.round(audioProcessing.gain * 100)}%</span>
+                              </div>
+                            </div>
+                            <div className="mic-meter" aria-label="Microphone input level">
+                              <div className="mic-meter-copy">
+                                <span>Peak level</span>
+                                <strong>{micLevelDb === null ? 'Select mic' : `${micLevelDb} dBFS`}</strong>
+                              </div>
+                              <div className="mic-meter-track">
+                                <span className="mic-meter-target" />
+                                <span className="mic-meter-fill" style={{ width: `${micLevelPercent}%` }} />
+                              </div>
+                              <div className="mic-meter-scale" aria-hidden="true">
+                                <span style={{ left: '0%' }}>-60</span>
+                                <span style={{ left: '40%' }}>-36</span>
+                                <span style={{ left: '70%' }}>-18</span>
+                                <span style={{ left: '80%' }}>-12</span>
+                                <span style={{ left: '100%' }}>0</span>
+                              </div>
+                              <p className="mic-meter-note">Aim voice peaks around -18 to -12 dBFS.</p>
+                            </div>
+                            <label className="processing-toggle">
+                              <input
+                                type="checkbox"
+                                checked={audioProcessing.noiseSuppression}
+                                onChange={e => setAudioProcessing(prev => ({
+                                  ...prev,
+                                  noiseSuppression: e.target.checked
+                                }))}
+                                disabled={recording}
+                              />
+                              Noise suppression
+                            </label>
+                            <label className="processing-toggle">
+                              <input
+                                type="checkbox"
+                                checked={audioProcessing.echoCancellation}
+                                onChange={e => setAudioProcessing(prev => ({
+                                  ...prev,
+                                  echoCancellation: e.target.checked
+                                }))}
+                                disabled={recording}
+                              />
+                              Echo cancellation
+                            </label>
+                            <label className="processing-toggle">
+                              <input
+                                type="checkbox"
+                                checked={audioProcessing.autoGainControl}
+                                onChange={e => setAudioProcessing(prev => ({
+                                  ...prev,
+                                  autoGainControl: e.target.checked
+                                }))}
+                                disabled={recording}
+                              />
+                              Auto gain
+                            </label>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1304,11 +2025,15 @@ function App() {
                         <input
                           type="checkbox"
                           checked={recordOptions.cameraIds.length > 0}
-                          onChange={e => {
+                          onChange={async e => {
                             if (recording) return;
                             if (e.target.checked) {
-                              if (cameraDevices.length > 0) {
-                                const selectedCamera = cameraDevices[0];
+                              const refreshedDevices = await getAvailableDevices(true, 'video');
+                              const availableCameras = refreshedDevices.videoDevices.length > 0
+                                ? refreshedDevices.videoDevices
+                                : cameraDevices;
+                              if (availableCameras.length > 0) {
+                                const selectedCamera = availableCameras[0];
                                 setRecordOptions({ ...recordOptions, cameraIds: [selectedCamera.deviceId] });
                                 void loadCameraResolutions([selectedCamera]);
                               }
@@ -1323,19 +2048,41 @@ function App() {
                       </label>
                       {recordOptions.cameraIds.length > 0 && (
                         <div className="device-submenu">
+                          <div className="screen-slot-actions">
+                            <button
+                              type="button"
+                              className="mini-action"
+                              onClick={async () => {
+                                if (recording) return;
+                                const refreshedDevices = await getAvailableDevices(true, 'video');
+                                if (recordOptions.cameraIds.length === 0 && refreshedDevices.videoDevices.length > 0) {
+                                  const selectedCamera = refreshedDevices.videoDevices[0];
+                                  setRecordOptions(prev => ({ ...prev, cameraIds: [selectedCamera.deviceId] }));
+                                  void loadCameraResolutions([selectedCamera]);
+                                }
+                              }}
+                              disabled={recording}
+                            >
+                              Refresh cameras
+                            </button>
+                          </div>
+                          <p className="submenu-hint">
+                            If the browser exposes real camera devices, you can try selecting several. Front/Rear fallback cameras record one at a time on mobile.
+                          </p>
                           {cameraDevices.map((device) => (
                             <div key={device.deviceId}>
                               <label className="device-item">
                                 <input
                                   type="checkbox"
                                   checked={recordOptions.cameraIds.includes(device.deviceId)}
-                                  onChange={() => {
+                                  onChange={(e) => {
                                     if (recording) return;
-                                    let cameraIds = [...recordOptions.cameraIds];
-                                    if (cameraIds.includes(device.deviceId)) {
-                                      cameraIds = cameraIds.filter(id => id !== device.deviceId);
-                                    } else {
-                                      cameraIds.push(device.deviceId);
+                                    const cameraIds = buildNextCameraIds(
+                                      recordOptions.cameraIds,
+                                      device.deviceId,
+                                      e.target.checked
+                                    );
+                                    if (e.target.checked) {
                                       void loadCameraResolutions([device]);
                                     }
                                     setRecordOptions({ ...recordOptions, cameraIds });
@@ -1461,43 +2208,52 @@ function App() {
               >×</button>
             </div>
           )}
-          {recordOptions.screenIds.includes('main') && videoUrls.screen && (
-            <div style={{marginBottom: '20px', textAlign: 'center'}}>
-              <VideoPreview src={videoUrls.screen} title="Screen Video" />
-              <div className="save-button-container">
-                <button
-                  className="neon-save"
-                  onClick={() => handleDownload(chunks.current['screen'] || [], generateFilename("screen", videoResolution), 'screen')}
-                >
-                  {savedStatus['screen'] ? 'Saved' : 'Save'}
-                </button>
-                {isShareSupported() && (
+          {recordOptions.screenIds.map(screenId => {
+            if (!videoUrls[screenId]) return null;
+            const screenLabel = screenDevices.find(device => device.deviceId === screenId)?.label || `Screen ${getScreenSlotNumber(screenId)}`;
+
+            return (
+              <div key={screenId} style={{marginBottom: '20px', textAlign: 'center'}}>
+                <VideoPreview src={videoUrls[screenId]} title={`${screenLabel} Video`} />
+                <div className="save-button-container">
                   <button
                     className="neon-save"
-                    onClick={() => {
-                      const chunksArr = chunks.current['screen'] || [];
-                      if (!chunksArr.length) return;
-                      const blob = new Blob(chunksArr, { type: 'video/webm' });
-                      const fileName = generateFilename("screen", videoResolution);
-                      if (navigator.share && blob) {
-                        const file = new File([blob], fileName, { type: blob.type });
-                        navigator.share({
-                          title: 'Screen Recording',
-                          text: 'Check out this recording!',
-                          files: [file],
-                        }).catch(err => console.log('Share failed:', err));
-                      }
-                    }}
+                    onClick={() => handleDownload(
+                      chunks.current[screenId] || [],
+                      generateScreenFilename(screenId, videoResolution),
+                      screenId
+                    )}
                   >
-                    Share
+                    {savedStatus[screenId] ? 'Saved' : 'Save'}
                   </button>
-                )}
-                <span className="file-size">
-                  {formatSize(chunks.current['screen']?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
-                </span>
+                  {isShareSupported() && (
+                    <button
+                      className="neon-save"
+                      onClick={() => {
+                        const chunksArr = chunks.current[screenId] || [];
+                        if (!chunksArr.length) return;
+                        const blob = new Blob(chunksArr, { type: 'video/webm' });
+                        const fileName = generateScreenFilename(screenId, videoResolution);
+                        if (navigator.share && blob) {
+                          const file = new File([blob], fileName, { type: blob.type });
+                          navigator.share({
+                            title: `${screenLabel} Recording`,
+                            text: 'Check out this recording!',
+                            files: [file],
+                          }).catch(err => console.log('Share failed:', err));
+                        }
+                      }}
+                    >
+                      Share
+                    </button>
+                  )}
+                  <span className="file-size">
+                    {formatSize(chunks.current[screenId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })}
           {recordOptions.cameraIds.map(camId => {
             const device = cameraDevices.find(d => d.deviceId === camId);
             if (!device || !videoUrls['camera_' + camId]) return null;
@@ -1550,11 +2306,12 @@ function App() {
           })}
           {recordOptions.micIds.map(micId => {
             const device = micDevices.find(d => d.deviceId === micId);
-            if (!device || !audioUrls['mic_' + micId]) return null;
+            const micLabel = device?.label || (isGenericMicId(micId) ? 'Phone microphone' : `Mic ${micId.slice(-4)}`);
+            if (!audioUrls['mic_' + micId]) return null;
             
             return (
               <div key={micId} style={{marginBottom: '20px', textAlign: 'center'}}>
-                <h3>{device.label || `Mic ${micId.slice(-4)}`}</h3>
+                <h3>{micLabel}</h3>
                 <audio
                   src={audioUrls['mic_' + micId] || undefined}
                   controls
@@ -1565,7 +2322,8 @@ function App() {
                     onClick={() => handleDownload(
                       chunks.current['mic_' + micId] || [], 
                       generateFilename("mic", audioQuality), 
-                      'mic_' + micId
+                      'mic_' + micId,
+                      'audio/webm'
                     )}
                   >
                     {savedStatus['mic_' + micId] ? 'Saved' : 'Save'}

@@ -5,9 +5,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: 'localhost', // Ensure it listens on localhost
-    strictPort: false, // Allow Vite to find an open port if 5173 is taken
-    port: 5173, // Explicitly set the port to 5173
+    host: '0.0.0.0',
+    strictPort: true,
+    port: 5173,
+    allowedHosts: ['tomass-macbook-pro.tail6f3ab4.ts.net'],
   },
   optimizeDeps: {
     exclude: ['@ffmpeg/ffmpeg'],

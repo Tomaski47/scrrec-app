@@ -3135,3 +3135,309 @@ body.light-mode,
     margin-top: 30px;
   }
 }
+
+/* Functional controls */
+.screen-slot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+button.mini-action {
+  min-width: 0;
+  height: auto;
+  margin: 0;
+  padding: 7px 11px;
+  border: 1px solid rgba(48, 255, 215, 0.38);
+  border-radius: 7px;
+  background: rgba(48, 255, 215, 0.08);
+  color: #f7f3e8;
+  box-shadow: none;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-shadow: none;
+}
+
+button.mini-action.secondary {
+  border-color: rgba(190, 133, 255, 0.42);
+  background: rgba(190, 133, 255, 0.08);
+}
+
+button.mini-action:hover {
+  background: rgba(48, 255, 215, 0.14);
+  box-shadow: none;
+  transform: none;
+}
+
+.audio-processing-controls {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.gain-row {
+  align-items: center;
+}
+
+.gain-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 210px;
+}
+
+.control-range {
+  width: 150px;
+  accent-color: #30ffd7;
+}
+
+.gain-value {
+  min-width: 42px;
+  color: #d8d0e8;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.processing-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #d8d0e8;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.processing-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #30ffd7;
+}
+
+.App.light-mode button.mini-action {
+  border-color: rgba(32, 156, 255, 0.4);
+  background: rgba(31, 229, 209, 0.08);
+  color: #111827;
+}
+
+.App.light-mode button.mini-action.secondary {
+  border-color: rgba(165, 111, 255, 0.42);
+  background: rgba(165, 111, 255, 0.08);
+}
+
+.App.light-mode .gain-value,
+.App.light-mode .processing-toggle {
+  color: #303849;
+}
+
+.App.light-mode .control-range,
+.App.light-mode .processing-toggle input {
+  accent-color: #269cff;
+}
+
+.device-submenu .submenu-hint {
+  margin: 2px 0 10px;
+  color: #c8bfd7;
+  font-size: 0.84rem;
+  font-weight: 450;
+  line-height: 1.4;
+}
+
+.device-submenu .submenu-dropdown {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
+  align-items: center;
+  width: min(100%, 390px);
+  gap: 10px;
+}
+
+.device-submenu .submenu-dropdown .settings-label {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.device-submenu .submenu-dropdown .control-select {
+  width: 100% !important;
+  min-width: 0;
+}
+
+.audio-processing-controls .submenu-dropdown {
+  margin-top: 0;
+}
+
+.gain-control {
+  min-width: 0;
+  width: 100%;
+}
+
+.control-range {
+  width: 100%;
+  min-width: 120px;
+}
+
+.gain-value {
+  text-align: right;
+}
+
+.mic-meter {
+  box-sizing: border-box;
+  width: min(100%, 390px);
+  padding: 8px 10px;
+  border: 1px solid rgba(48, 255, 215, 0.22);
+  border-radius: 7px;
+  background: rgba(6, 15, 22, 0.28);
+}
+
+.mic-meter-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  color: #c8bfd7;
+  font-size: 0.78rem;
+  font-weight: 550;
+}
+
+.mic-meter-copy strong {
+  color: #f7f3e8;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.mic-meter-track {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mic-meter-fill,
+.mic-meter-target {
+  position: absolute;
+  inset-block: 0;
+  display: block;
+  border-radius: inherit;
+}
+
+.mic-meter-fill {
+  left: 0;
+  z-index: 2;
+  min-width: 2px;
+  background: linear-gradient(90deg, #30ffd7 0%, #34b7ff 74%, #f04fd1 100%);
+  transition: width 45ms linear;
+}
+
+.mic-meter-target {
+  left: 70%;
+  z-index: 1;
+  width: 10%;
+  background: rgba(48, 255, 215, 0.22);
+  box-shadow: 0 0 10px rgba(48, 255, 215, 0.16);
+}
+
+.mic-meter-scale {
+  position: relative;
+  height: 16px;
+  margin-top: 5px;
+  color: #aeb6c7;
+  font-size: 0.68rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.mic-meter-scale span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+}
+
+.mic-meter-scale span:first-child {
+  transform: none;
+}
+
+.mic-meter-scale span:last-child {
+  transform: translateX(-100%);
+}
+
+.mic-meter-note {
+  margin: 2px 0 0;
+  color: #c8bfd7;
+  font-size: 0.76rem;
+  font-weight: 450;
+  line-height: 1.35;
+}
+
+.App.light-mode .device-submenu .submenu-hint,
+.App.light-mode .mic-meter-copy {
+  color: #4b5565;
+}
+
+.App.light-mode .mic-meter {
+  border-color: rgba(32, 156, 255, 0.2);
+  background: #f7fbff;
+}
+
+.App.light-mode .mic-meter-copy strong {
+  color: #121826;
+}
+
+.App.light-mode .mic-meter-track {
+  background: rgba(31, 41, 55, 0.1);
+}
+
+.App.light-mode .mic-meter-scale {
+  color: #697386;
+}
+
+.App.light-mode .mic-meter-note {
+  color: #4b5565;
+}
+
+@media (max-width: 700px) {
+  .device-submenu .submenu-dropdown {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .mic-meter {
+    width: 100%;
+  }
+}
+
+/* Keep the whole source row clickable, not just the text label. */
+.option-block {
+  padding: 0;
+}
+
+.option-block > label.options-checkbox {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.option-block .device-submenu {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0 16px 14px 40px;
+}
+
+.device-submenu label.device-unavailable {
+  opacity: 0.66;
+  cursor: not-allowed;
+}
+
+.device-submenu label.device-unavailable input[type="checkbox"] {
+  box-shadow: none;
+}
+
+@media (max-width: 700px) {
+  .option-block .device-submenu {
+    padding-inline: 16px;
+  }
+}
