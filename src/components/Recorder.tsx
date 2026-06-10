@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { CameraIcon } from '@lucide/react';
-import { FaMicrophone } from 'react-icons/fa';
 
 const Recorder = () => {
   const [recordScreen, setRecordScreen] = useState(false);
@@ -57,8 +55,8 @@ const Recorder = () => {
         {isRecording ? 'Stop Recording' : 'Start Recording'}
       </button>
       <div className="flex flex-col items-center justify-center">
-        {recordMic ? <FaMicrophone size={24} /> : null}
-        {recordCamera ? <CameraIcon size={24} /> : null}
+        {recordMic ? <span aria-label="Microphone enabled">Mic</span> : null}
+        {recordCamera ? <span aria-label="Camera enabled">Camera</span> : null}
       </div>
     </div>
   );

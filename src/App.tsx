@@ -92,9 +92,128 @@ const getCameraCapabilities = async (deviceId: string): Promise<string[]> => {
   }
 };
 
+type LegalDocument = 'privacy' | 'terms';
+
+const legalDocuments: Record<LegalDocument, {
+  title: string;
+  updated: string;
+  sections: { heading: string; body: string }[];
+}> = {
+  privacy: {
+    title: 'Privacy Policy',
+    updated: 'June 9, 2026',
+    sections: [
+      {
+        heading: 'Overview',
+        body: 'Sadilek Screen Recorder is designed as a browser-based recording tool. Recordings are created through your browser media APIs and are not intentionally uploaded, stored, reviewed, or sold by Sadilek Innovation through this app.',
+      },
+      {
+        heading: 'Information the app may access',
+        body: 'The app may access your screen, camera, and microphone only after you select recording options and approve browser permission prompts. You can revoke those permissions in your browser or operating system settings.',
+      },
+      {
+        heading: 'Recordings',
+        body: 'Recorded files remain in your browser session until you choose to save or share them. If you use browser share or download features, your browser, operating system, or selected destination may process that file.',
+      },
+      {
+        heading: 'Site and hosting data',
+        body: 'Our hosting, security, or analytics providers may process standard technical data such as IP address, browser type, timestamps, requested pages, and performance or security events. We use that information to operate, secure, and improve the site.',
+      },
+      {
+        heading: 'Children and third parties',
+        body: 'This app is not directed to children under 13. Links to third-party sites are governed by those sites\' own policies.',
+      },
+      {
+        heading: 'Contact',
+        body: 'Questions about this policy can be sent through sadilekinnovation.com.',
+      },
+    ],
+  },
+  terms: {
+    title: 'Terms of Service',
+    updated: 'June 9, 2026',
+    sections: [
+      {
+        heading: 'Use of the app',
+        body: 'Sadilek Screen Recorder is provided as a lightweight browser utility for capturing screen, camera, and microphone recordings. You are responsible for using it lawfully and only recording content, conversations, or people when you have the right and consent to do so.',
+      },
+      {
+        heading: 'Your recordings',
+        body: 'You control your recordings. Sadilek Innovation does not claim ownership of recordings you create with the app.',
+      },
+      {
+        heading: 'Acceptable use',
+        body: 'Do not use the app to violate privacy rights, intellectual property rights, workplace policies, platform rules, or applicable recording consent laws.',
+      },
+      {
+        heading: 'Availability and compatibility',
+        body: 'Browser recording support varies by device, browser, and permission settings. The app is provided as is, without a guarantee that every recording will complete, save, or play back as expected.',
+      },
+      {
+        heading: 'Limitation of liability',
+        body: 'To the fullest extent allowed by law, Sadilek Innovation is not liable for lost recordings, failed captures, misuse of the app, or indirect damages arising from use of the app.',
+      },
+      {
+        heading: 'Changes',
+        body: 'We may update the app or these terms from time to time. Continued use of the app after updates means you accept the updated terms.',
+      },
+    ],
+  },
+};
+
+const projectTimeline = [
+  {
+    date: 'May 30, 2025',
+    body: 'Clean React/Vite app initialized, then Docker and nginx static fallback were added for deployment.',
+  },
+  {
+    date: 'May 30-31, 2025',
+    body: 'FFmpeg packaging, mobile audio fallback, recording format controls, and resolution options landed.',
+  },
+  {
+    date: 'May 31, 2025',
+    body: 'Mic/camera startup fixes, file-size readouts, inline permission status, save-state polish, and device-specific filenames were added.',
+  },
+  {
+    date: 'June 1, 2025',
+    body: 'The v1.3 branch refined camera submenus, selected camera labels, portrait preview handling, submenu colors, and vertical layout.',
+  },
+  {
+    date: 'June 1-24, 2025',
+    body: 'Main carried a Claude Opus 4 review pass and follow-up cleanup before this 2026 Sadilek Innovation refresh.',
+  },
+];
+
+const technicalWins = [
+  'Frontend-only capture flow: files are created in the browser session and saved or shared only when the user chooses.',
+  'Separate screen, camera, and mic outputs with per-source save/share actions and generated filenames.',
+  'Screen and camera resolution controls, including camera capability checks deferred until users opt into camera access.',
+  'Microphone capture requests echo cancellation and noise suppression; manual gain controls are reserved for the next functional pass.',
+];
+
+const stackDetails = [
+  'React 18, TypeScript, and Vite 6 for the frontend app shell.',
+  'Browser MediaDevices, getDisplayMedia, getUserMedia, and MediaRecorder APIs for capture.',
+  '@ffmpeg/ffmpeg is included for browser-side media conversion support.',
+  'file-saver and mime support download/export handling.',
+  'Docker and nginx are included for static deployment hosting.',
+  'Tailwind/PostCSS tooling exists in the project, while this UI pass is primarily custom CSS.',
+];
+
+const toolNotes = [
+  'Confirmed from repo history: the project began from a Bolt DIY build.',
+  'Development notes from this pass: early work used free OpenRouter credits through Bolt DIY, with extra help from ChatGPT through a Cursor/VS Code workflow.',
+  'Confirmed from a June 1 commit: a Claude Opus 4 review pass influenced later refinements.',
+  'Current 2026 refresh is being edited in Codex.',
+  'Other exact model/editor details are not recorded in this repo, so they are not claimed here.',
+];
+
+const githubUrl = 'https://github.com/Tomaski47/scrrec-app';
+
 function App() {
   // Dark mode state
   const [darkMode, setDarkMode] = useState(true);
+  const [legalModal, setLegalModal] = useState<LegalDocument | null>(null);
   
   // State declarations
   const [showClearConfirmation, setShowClearConfirmation] = useState(false);
@@ -149,7 +268,7 @@ function App() {
 
   // Update document title
   useEffect(() => {
-    document.title = "Si Recorder";
+    document.title = "Screen Recorder | Sadilek Innovation";
   }, []);
 
   // Apply dark mode class to body
@@ -214,6 +333,22 @@ function App() {
       }
       ffmpeg.current = createFFmpeg({ log: true });
       await ffmpeg.current.load();
+    }
+  };
+
+  const loadCameraResolutions = async (devices: MediaDeviceInfo[]) => {
+    for (const camera of devices) {
+      if (availableCameraResolutions[camera.deviceId]) continue;
+
+      const resolutions = await getCameraCapabilities(camera.deviceId);
+      setAvailableCameraResolutions(prev => ({
+        ...prev,
+        [camera.deviceId]: resolutions
+      }));
+      setCameraResolutions(prev => ({
+        ...prev,
+        [camera.deviceId]: prev[camera.deviceId] || resolutions[0] || '1080p'
+      }));
     }
   };
 
@@ -305,18 +440,8 @@ function App() {
       setCameraDevices(videoDevices);
       setMicDevices(audioDevices);
       
-      // Get camera resolutions for each device
-      for (const camera of videoDevices) {
-        const resolutions = await getCameraCapabilities(camera.deviceId);
-        setAvailableCameraResolutions(prev => ({
-          ...prev,
-          [camera.deviceId]: resolutions
-        }));
-        // Set default resolution
-        setCameraResolutions(prev => ({
-          ...prev,
-          [camera.deviceId]: resolutions[0] || '1080p'
-        }));
+      if (requestPermissions || hasRequestedPermissions) {
+        await loadCameraResolutions(videoDevices);
       }
     } catch (error) {
       console.error('Error enumerating devices:', error);
@@ -818,13 +943,13 @@ function App() {
     return (
       <div className="browser-notice">
         {isSafari && !isMobile && (
-          <p>📱 Safari detected: Limited recording support. For best experience, use Chrome or Firefox.</p>
+          <p>Safari detected: recording support may be limited. Chrome and Firefox usually work best.</p>
         )}
         {isFirefox && (
-          <p>🦊 Firefox detected: Full support available. Grant permissions when prompted.</p>
+          <p>Firefox detected: recording support is available. Grant permissions when prompted.</p>
         )}
         {isIncognito && (
-          <p>🕵️ Private browsing detected: Some features may be limited. Exit private mode for full functionality.</p>
+          <p>Private browsing detected: some recording features may be limited.</p>
         )}
       </div>
     );
@@ -892,276 +1017,372 @@ function App() {
     return navigator.share !== undefined && navigator.canShare !== undefined;
   };
 
+  const activeLegalDocument = legalModal ? legalDocuments[legalModal] : null;
+
   // Main render
   return (
     <div className={`App ${darkMode ? 'dark-mode' : 'light-mode'}`}>
-      <div className="App-header">
-        <div className="theme-toggle">
-          <button
-            className="theme-toggle-btn"
-            onClick={() => setDarkMode(!darkMode)}
-            aria-label="Toggle theme"
-          >
-            {darkMode ? '☀️' : '🌙'}
-          </button>
-        </div>
-        
-        <span className="header-subtitle" style={{ marginBottom: '10px' }}>100% vibe coded</span>
-        <h1 className="header-title" style={{ marginTop: 0, marginBottom: '14px' }}>Si Recorder</h1>
-        <p className="header-description" style={{ marginTop: '0', marginBottom: '18px' }}>
-          Capture your devices with ease!
-        </p>
-        <BrowserNotice />
-        
-        <div className="settings-row" style={{ margin: "0 auto", display: "flex", justifyContent: "center" }}>
-          <div
-            className="settings-grid"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "24px",
-              width: "100%",
-              maxWidth: "650px",
-            }}
-          >
-            <div className="settings-control" style={{ flex: 1 }}>
-              <div className="display-center">
-                <div className="checkbox-group">
-                  {/* Screen */}
-                  <div className={`option-block${recordOptions.screenIds.length > 0 ? ' has-submenu' : ''}`}>
-                    <label className="options-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={recordOptions.screenIds.length > 0}
-                        onChange={e => {
-                          if (recording) return; // Prevent changes during recording
-                          let screenIds = recordOptions.screenIds;
-                          if (e.target.checked) {
-                            screenIds = ['main'];
-                          } else {
-                            screenIds = [];
-                          }
-                          setRecordOptions({ ...recordOptions, screenIds });
-                        }}
-                        disabled={recording}
-                        className="styled-checkbox"
-                      />
-                      Screen
-                    </label>
-                    {recordOptions.screenIds.length > 0 && (
-                      <div className="device-submenu">
-                        {!isMobile ? (
-                          <>
-                            {screenDevices.map((device, index) => {
-                              let label = "";
-                              if (device.deviceId === "main" && actualScreenResolution) {
-                                label = `Screen (${actualScreenResolution})`;
-                              }
-                              return (
-                                <label key={device.deviceId}>
-                                  <input
-                                    type="checkbox"
-                                    checked={recordOptions.screenIds.includes(device.deviceId)}
-                                    onChange={(e) => {
-                                      if (recording) return;
-                                      let screenIds = [...recordOptions.screenIds];
-                                      if (e.target.checked) {
-                                        if (!screenIds.includes(device.deviceId)) screenIds.push(device.deviceId);
-                                      } else {
-                                        screenIds = screenIds.filter((id) => id !== device.deviceId);
-                                      }
-                                      setRecordOptions({ ...recordOptions, screenIds });
-                                    }}
-                                    disabled={recording}
-                                    className="styled-checkbox"
-                                  />
-                                  <span className="device-label">
-                                    {label}
-                                    {recordOptions.screenIds.includes(device.deviceId) && (
-                                      <span className="device-permission">
-                                        : {permissionStatus.screen || 'TBD'}
-                                      </span>
-                                    )}
-                                  </span>
-                                </label>
-                              );
-                            })}
-                            {/* Resolution dropdown for screen */}
-                            <div className="settings-row submenu-dropdown">
-                              <div className="settings-label">Resolution:</div>
-                              <select
-                                className="control-select"
-                                value={videoResolution}
-                                onChange={e => setVideoResolution(e.target.value as any)}
-                                disabled={recording}
-                              >
-                                <option value="fullscreen">Max ({actualScreenResolution})</option>
-                                <option value="1080p">1080p</option>
-                                <option value="720p">720p</option>
-                                <option value="480p">480p</option>
-                                <option value="360p">360p</option>
-                              </select>
-                            </div>
-                          </>
-                        ) : (
-                          <p style={{ color: '#bbb', fontSize: '0.85rem', marginTop: '0.5rem' }}>
-                            Screen recording is not supported on mobile devices.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Mic */}
-                  <div className={`option-block${recordOptions.mic && micDevices.length > 0 ? ' has-submenu' : ''}`}>
-                    <label className="options-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={recordOptions.mic}
-                        onChange={e => {
-                          if (recording) return;
-                          if (e.target.checked) {
-                            let micIds = recordOptions.micIds;
-                            if (micIds.length === 0 && micDevices.length > 0) {
-                              micIds = [micDevices[0].deviceId];
+      <main className="app-shell">
+        <section className="site-intro" aria-labelledby="site-title">
+          <div className="brand-row">
+            <span className="brand-kicker">Sadilek Innovation Lab</span>
+            <div className="theme-toggle">
+              <span className="theme-toggle-label">Theme</span>
+              <button
+                className="theme-toggle-btn"
+                onClick={() => setDarkMode(!darkMode)}
+                aria-label={`Switch to ${darkMode ? 'light' : 'dark'} mode`}
+                title={`Switch to ${darkMode ? 'light' : 'dark'} mode`}
+              >
+                {darkMode ? (
+                  <span className="theme-icon theme-icon-moon" aria-hidden="true" />
+                ) : (
+                  <svg
+                    className="theme-icon theme-icon-sun-svg"
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07l1.77-1.77M17.3 6.7l1.77-1.77" />
+                  </svg>
+                )}
+                <span>{darkMode ? 'Dark' : 'Light'}</span>
+              </button>
+            </div>
+          </div>
+          <h1 id="site-title">
+            <span className="title-word title-word-screen">Screen</span>{" "}
+            <span className="title-word title-word-recorder">Recorder</span>
+          </h1>
+          <p>
+            A local-first, frontend-only capture flow for recording screen, mic, and camera input
+            directly in your browser. Files are generated on your computer and stay in your session
+            until you save or share them. Free and open source, built in May 2025 from a Bolt DIY
+            start, refined through June, and finally a 2026 design pass.
+          </p>
+          <div className="intro-meta" aria-label="Recorder highlights">
+            <span>Free + open source</span>
+            <span>Browser-only frontend</span>
+            <span>Data stays local</span>
+          </div>
+          <details className="project-notes">
+            <summary>
+              <span>Technical details</span>
+              <span>Expand to see stack, milestones, build notes</span>
+            </summary>
+            <div className="project-notes-body">
+              <section>
+                <h2>Milestones</h2>
+                <ol className="timeline-list">
+                  {projectTimeline.map(item => (
+                    <li key={`${item.date}-${item.body}`}>
+                      <span>{item.date}</span>
+                      {item.body}
+                    </li>
+                  ))}
+                </ol>
+              </section>
+              <section>
+                <h2>Features</h2>
+                <ul>
+                  {technicalWins.map(item => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+              <section>
+                <h2>Stack</h2>
+                <ul>
+                  {stackDetails.map(item => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+              <section>
+                <h2>Build tools</h2>
+                <ul>
+                  {toolNotes.map(item => (
+                    <li key={item}>{item}</li>
+                  ))}
+                  <li>
+                    Source repo:{' '}
+                    <a href={githubUrl} target="_blank" rel="noopener noreferrer">
+                      github.com/Tomaski47/scrrec-app
+                    </a>
+                  </li>
+                </ul>
+              </section>
+            </div>
+          </details>
+        </section>
+
+        <div className="App-header recorder-panel">
+          <div className="recorder-heading">
+            <span className="panel-kicker">Recorder setup</span>
+            <h2>Choose Sources</h2>
+            <p>
+              Select screen, mic, camera, or any combination.
+            </p>
+          </div>
+          <BrowserNotice />
+          
+          <div className="settings-row" style={{ margin: "0 auto", display: "flex", justifyContent: "center" }}>
+            <div
+              className="settings-grid"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "24px",
+                width: "100%",
+                maxWidth: "650px",
+              }}
+            >
+              <div className="settings-control" style={{ flex: 1 }}>
+                <div className="display-center">
+                  <div className="checkbox-group">
+                    {/* Screen */}
+                    <div className={`option-block${recordOptions.screenIds.length > 0 ? ' has-submenu' : ''}`}>
+                      <label className="options-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={recordOptions.screenIds.length > 0}
+                          onChange={e => {
+                            if (recording) return; // Prevent changes during recording
+                            let screenIds = recordOptions.screenIds;
+                            if (e.target.checked) {
+                              screenIds = ['main'];
+                            } else {
+                              screenIds = [];
                             }
-                            setRecordOptions({ ...recordOptions, mic: true, micIds });
-                          } else {
-                            setRecordOptions({ ...recordOptions, mic: false, micIds: [] });
-                          }
-                        }}
-                        disabled={recording}
-                        className="styled-checkbox"
-                      />
-                      Mic
-                    </label>
-                    {recordOptions.mic && micDevices.length > 0 && (
-                      <div className="device-submenu">
-                        {micDevices.map(device => (
-                          <label key={device.deviceId}>
-                            <input
-                              type="checkbox"
-                              checked={recordOptions.micIds.includes(device.deviceId)}
-                              onChange={e => {
-                                if (recording) return;
-                                let micIds = [...recordOptions.micIds];
-                                if (e.target.checked) {
-                                  if (!micIds.includes(device.deviceId)) micIds.push(device.deviceId);
-                                } else {
-                                  micIds = micIds.filter(id => id !== device.deviceId);
+                            setRecordOptions({ ...recordOptions, screenIds });
+                          }}
+                          disabled={recording}
+                          className="styled-checkbox"
+                        />
+                        Screen
+                      </label>
+                      {recordOptions.screenIds.length > 0 && (
+                        <div className="device-submenu">
+                          {!isMobile ? (
+                            <>
+                              {screenDevices.map((device, index) => {
+                                let label = "";
+                                if (device.deviceId === "main" && actualScreenResolution) {
+                                  label = `Screen (${actualScreenResolution})`;
                                 }
-                                setRecordOptions({ ...recordOptions, micIds });
-                              }}
-                              disabled={recording}
-                              className="styled-checkbox"
-                            />
-                            <span className="device-label">
-                              {device.label || `Mic ${device.deviceId.slice(-4)}`}
-                              {recordOptions.micIds.includes(device.deviceId) && (
-                                <span className="device-permission">
-                                  : {permissionStatus.microphone || 'TBD'}
-                                </span>
-                              )}
-                            </span>
-                          </label>
-                        ))}
-                        {/* Audio quality dropdown */}
-                        <div className="settings-row submenu-dropdown">
-                          <div className="settings-label">Quality:</div>
-                          <select
-                            className="control-select"
-                            value={audioQuality}
-                            onChange={e => setAudioQuality(e.target.value)}
-                            disabled={recording}
-                          >
-                            <option value="low">Low (64kbps)</option>
-                            <option value="mid">Mid (128kbps)</option>
-                            <option value="best">Best (256kbps)</option>
-                          </select>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Camera */}
-                  <div className={`option-block${recordOptions.cameraIds.length > 0 ? ' has-submenu' : ''}`}>
-                    <label className="options-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={recordOptions.cameraIds.length > 0}
-                        onChange={e => {
-                          if (recording) return;
-                          if (e.target.checked) {
-                            if (cameraDevices.length > 0) {
-                              setRecordOptions({ ...recordOptions, cameraIds: [cameraDevices[0].deviceId] });
-                            }
-                          } else {
-                            setRecordOptions({ ...recordOptions, cameraIds: [] });
-                          }
-                        }}
-                        disabled={recording}
-                        className="styled-checkbox"
-                      />
-                      Camera
-                    </label>
-                    {recordOptions.cameraIds.length > 0 && (
-                      <div className="device-submenu">
-                        {cameraDevices.map((device) => (
-                          <div key={device.deviceId}>
-                            <label className="device-item">
-                              <input
-                                type="checkbox"
-                                checked={recordOptions.cameraIds.includes(device.deviceId)}
-                                onChange={() => {
-                                  if (recording) return;
-                                  let cameraIds = [...recordOptions.cameraIds];
-                                  if (cameraIds.includes(device.deviceId)) {
-                                    cameraIds = cameraIds.filter(id => id !== device.deviceId);
-                                  } else {
-                                    cameraIds.push(device.deviceId);
-                                  }
-                                  setRecordOptions({ ...recordOptions, cameraIds });
-                                }}
-                                disabled={recording}
-                              />
-                              <span className="device-label">{device.label || "Camera"}</span>
-                              <span className="device-permission">
-                                {recordOptions.cameraIds.includes(device.deviceId) && cameraPermission === "granted" ? ": granted" : ""}
-                              </span>
-                            </label>
-                            {/* Camera resolution dropdown */}
-                            {recordOptions.cameraIds.includes(device.deviceId) && availableCameraResolutions[device.deviceId] && (
-                              <div className="settings-row submenu-dropdown camera-resolution">
+                                return (
+                                  <label key={device.deviceId}>
+                                    <input
+                                      type="checkbox"
+                                      checked={recordOptions.screenIds.includes(device.deviceId)}
+                                      onChange={(e) => {
+                                        if (recording) return;
+                                        let screenIds = [...recordOptions.screenIds];
+                                        if (e.target.checked) {
+                                          if (!screenIds.includes(device.deviceId)) screenIds.push(device.deviceId);
+                                        } else {
+                                          screenIds = screenIds.filter((id) => id !== device.deviceId);
+                                        }
+                                        setRecordOptions({ ...recordOptions, screenIds });
+                                      }}
+                                      disabled={recording}
+                                      className="styled-checkbox"
+                                    />
+                                    <span className="device-label">
+                                      {label}
+                                      {recordOptions.screenIds.includes(device.deviceId) && (
+                                        <span className="device-permission">
+                                          : {permissionStatus.screen || 'TBD'}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                              {/* Resolution dropdown for screen */}
+                              <div className="settings-row submenu-dropdown">
                                 <div className="settings-label">Resolution:</div>
                                 <select
                                   className="control-select"
-                                  value={cameraResolutions[device.deviceId] || '1080p'}
-                                  onChange={e => setCameraResolutions(prev => ({
-                                    ...prev,
-                                    [device.deviceId]: e.target.value
-                                  }))}
+                                  value={videoResolution}
+                                  onChange={e => setVideoResolution(e.target.value as any)}
                                   disabled={recording}
                                 >
-                                  {availableCameraResolutions[device.deviceId].map(res => (
-                                    <option key={res} value={res}>{res}</option>
-                                  ))}
+                                  <option value="fullscreen">Max ({actualScreenResolution})</option>
+                                  <option value="1080p">1080p</option>
+                                  <option value="720p">720p</option>
+                                  <option value="480p">480p</option>
+                                  <option value="360p">360p</option>
                                 </select>
                               </div>
-                            )}
+                            </>
+                          ) : (
+                            <p style={{ color: '#bbb', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+                              Screen recording is not supported on mobile devices.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Mic */}
+                    <div className={`option-block${recordOptions.mic && micDevices.length > 0 ? ' has-submenu' : ''}`}>
+                      <label className="options-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={recordOptions.mic}
+                          onChange={e => {
+                            if (recording) return;
+                            if (e.target.checked) {
+                              let micIds = recordOptions.micIds;
+                              if (micIds.length === 0 && micDevices.length > 0) {
+                                micIds = [micDevices[0].deviceId];
+                              }
+                              setRecordOptions({ ...recordOptions, mic: true, micIds });
+                            } else {
+                              setRecordOptions({ ...recordOptions, mic: false, micIds: [] });
+                            }
+                          }}
+                          disabled={recording}
+                          className="styled-checkbox"
+                        />
+                        Mic
+                      </label>
+                      {recordOptions.mic && micDevices.length > 0 && (
+                        <div className="device-submenu">
+                          {micDevices.map(device => (
+                            <label key={device.deviceId}>
+                              <input
+                                type="checkbox"
+                                checked={recordOptions.micIds.includes(device.deviceId)}
+                                onChange={e => {
+                                  if (recording) return;
+                                  let micIds = [...recordOptions.micIds];
+                                  if (e.target.checked) {
+                                    if (!micIds.includes(device.deviceId)) micIds.push(device.deviceId);
+                                  } else {
+                                    micIds = micIds.filter(id => id !== device.deviceId);
+                                  }
+                                  setRecordOptions({ ...recordOptions, micIds });
+                                }}
+                                disabled={recording}
+                                className="styled-checkbox"
+                              />
+                              <span className="device-label">
+                                {device.label || `Mic ${device.deviceId.slice(-4)}`}
+                                {recordOptions.micIds.includes(device.deviceId) && (
+                                  <span className="device-permission">
+                                    : {permissionStatus.microphone || 'TBD'}
+                                  </span>
+                                )}
+                              </span>
+                            </label>
+                          ))}
+                          {/* Audio quality dropdown */}
+                          <div className="settings-row submenu-dropdown">
+                            <div className="settings-label">Quality:</div>
+                            <select
+                              className="control-select"
+                              value={audioQuality}
+                              onChange={e => setAudioQuality(e.target.value)}
+                              disabled={recording}
+                            >
+                              <option value="low">Low (64kbps)</option>
+                              <option value="mid">Mid (128kbps)</option>
+                              <option value="best">Best (256kbps)</option>
+                            </select>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Camera */}
+                    <div className={`option-block${recordOptions.cameraIds.length > 0 ? ' has-submenu' : ''}`}>
+                      <label className="options-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={recordOptions.cameraIds.length > 0}
+                          onChange={e => {
+                            if (recording) return;
+                            if (e.target.checked) {
+                              if (cameraDevices.length > 0) {
+                                const selectedCamera = cameraDevices[0];
+                                setRecordOptions({ ...recordOptions, cameraIds: [selectedCamera.deviceId] });
+                                void loadCameraResolutions([selectedCamera]);
+                              }
+                            } else {
+                              setRecordOptions({ ...recordOptions, cameraIds: [] });
+                            }
+                          }}
+                          disabled={recording}
+                          className="styled-checkbox"
+                        />
+                        Camera
+                      </label>
+                      {recordOptions.cameraIds.length > 0 && (
+                        <div className="device-submenu">
+                          {cameraDevices.map((device) => (
+                            <div key={device.deviceId}>
+                              <label className="device-item">
+                                <input
+                                  type="checkbox"
+                                  checked={recordOptions.cameraIds.includes(device.deviceId)}
+                                  onChange={() => {
+                                    if (recording) return;
+                                    let cameraIds = [...recordOptions.cameraIds];
+                                    if (cameraIds.includes(device.deviceId)) {
+                                      cameraIds = cameraIds.filter(id => id !== device.deviceId);
+                                    } else {
+                                      cameraIds.push(device.deviceId);
+                                      void loadCameraResolutions([device]);
+                                    }
+                                    setRecordOptions({ ...recordOptions, cameraIds });
+                                  }}
+                                  disabled={recording}
+                                />
+                                <span className="device-label">{device.label || "Camera"}</span>
+                                <span className="device-permission">
+                                  {recordOptions.cameraIds.includes(device.deviceId) && cameraPermission === "granted" ? ": granted" : ""}
+                                </span>
+                              </label>
+                              {/* Camera resolution dropdown */}
+                              {recordOptions.cameraIds.includes(device.deviceId) && availableCameraResolutions[device.deviceId] && (
+                                <div className="settings-row submenu-dropdown camera-resolution">
+                                  <div className="settings-label">Resolution:</div>
+                                  <select
+                                    className="control-select"
+                                    value={cameraResolutions[device.deviceId] || '1080p'}
+                                    onChange={e => setCameraResolutions(prev => ({
+                                      ...prev,
+                                      [device.deviceId]: e.target.value
+                                    }))}
+                                    disabled={recording}
+                                  >
+                                    {availableCameraResolutions[device.deviceId].map(res => (
+                                      <option key={res} value={res}>{res}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div className="action-buttons">
-          <button className="btn" onClick={startRecording} disabled={recording}>
+          <div className="action-buttons">
+          <button
+            className="btn"
+            onClick={startRecording}
+            disabled={recording}
+          >
             Start Recording
           </button>
           <button 
@@ -1194,7 +1415,7 @@ function App() {
         {recording && (
           <>
             <div className="recording-timer">
-              ⏺ Recording: {formatTime(recordingTime)}
+              Recording: {formatTime(recordingTime)}
             </div>
             <div className={`recording-size${
               recordingSize > 1024 * 1024 * 1024 ? ' danger' : 
@@ -1206,8 +1427,8 @@ function App() {
                 hasAudio: recordOptions.mic && recordOptions.micIds.length > 0,
                 audioQuality
               }))}
-              {recordingSize > 1024 * 1024 * 1024 && " ⚠️ Recording may become unstable"}
-              {recordingSize > 500 * 1024 * 1024 && recordingSize <= 1024 * 1024 * 1024 && " ⚠️ Large file size"}
+              {recordingSize > 1024 * 1024 * 1024 && " Recording may become unstable"}
+              {recordingSize > 500 * 1024 * 1024 && recordingSize <= 1024 * 1024 * 1024 && " Large file size"}
             </div>
           </>
         )}
@@ -1377,7 +1598,7 @@ function App() {
               </div>
             );
           })}
-        </div>
+          </div>
         
         {/* Clear All button */}
         {(recordedChunks.length > 0 || Object.values(videoUrls).some(Boolean) || Object.values(audioUrls).some(Boolean)) && (
@@ -1401,21 +1622,69 @@ function App() {
             )}
           </>
         )}
-      </div>
-
-      <div className="app-footer">
-        <div className="copyright">
-          © 2025 Sadilek Innovation
         </div>
-        <a
-          href="https://www.sadilekinnovation.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="footer-link"
-        >
-          sadilekinnovation.com
-        </a>
-      </div>
+
+        <footer className="app-footer">
+          <div className="copyright">
+            © 2026{' '}
+            <a
+              href="https://www.sadilekinnovation.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="footer-link"
+            >
+              Sadilek Innovation
+            </a>
+          </div>
+          <div className="footer-actions">
+            <a
+              href={githubUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="footer-link"
+            >
+              GitHub
+            </a>
+            <button className="footer-link footer-button" onClick={() => setLegalModal('privacy')}>
+              Privacy Policy
+            </button>
+            <button className="footer-link footer-button" onClick={() => setLegalModal('terms')}>
+              Terms of Service
+            </button>
+          </div>
+        </footer>
+      </main>
+
+      {activeLegalDocument && (
+        <div className="legal-modal-backdrop" role="presentation" onClick={() => setLegalModal(null)}>
+          <section
+            className="legal-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="legal-modal-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="legal-modal-header">
+              <div>
+                <span className="legal-eyebrow">Legal</span>
+                <h2 id="legal-modal-title">{activeLegalDocument.title}</h2>
+                <p>Last updated: {activeLegalDocument.updated}</p>
+              </div>
+              <button className="legal-close" onClick={() => setLegalModal(null)} aria-label="Close legal document">
+                <span aria-hidden="true">&times;</span>
+              </button>
+            </div>
+            <div className="legal-content">
+              {activeLegalDocument.sections.map(section => (
+                <section key={section.heading}>
+                  <h3>{section.heading}</h3>
+                  <p>{section.body}</p>
+                </section>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
