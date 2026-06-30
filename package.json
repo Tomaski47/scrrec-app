@@ -15,7 +15,8 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
+    "dev": "vite",
+    "dev:5174": "vite --host 127.0.0.1 --port 5174 --strictPort",
     "start": "npm run dev",
     "build": "vite build",
     "lint": "eslint .",

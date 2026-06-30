@@ -213,11 +213,13 @@ const stackDetails = [
   'file-saver and mime support download/export handling.',
   'Docker and nginx are included for static deployment hosting.',
   'Tailwind/PostCSS tooling exists in the project, while the 2026 refresh and functional controls are primarily custom CSS.',
-  'Vite local serving is pinned to port 5173 with LAN/Tailscale host access for phone-device testing.',
+  'Vite local serving currently defaults to port 5174, with LAN/Tailscale host access available for phone-device testing.',
 ];
 
 const toolNotes = [
   'Confirmed from repo history: the project began from a Bolt DIY build.',
+  'Recording files are generated on your computer and stay in your browser session until you save or share them.',
+  'The app is free and open source, built in May 2025 from a Bolt DIY start, refined through June, and finished with a 2026 design pass.',
   'Development notes from this pass: early work used free OpenRouter credits through Bolt DIY, with extra help from ChatGPT through a Cursor/VS Code workflow.',
   'Confirmed from a June 1 commit: a Claude Opus 4 review pass influenced later refinements.',
   'The June 2026 design and functional refresh was edited in Codex through iterative local browser testing.',
@@ -1229,8 +1231,8 @@ function App() {
 
       // Get screen streams if selected. Browsers expose screens through the picker, not enumeration.
       if (selectedScreenIds.length > 0) {
-        if (!supportsDisplayMedia || isMobile) {
-          setPermissionError('Screen recording is not supported in this browser or device.');
+        if (!supportsDisplayMedia) {
+          setPermissionError('This browser does not expose screen capture. Screen recording may be unavailable on this device.');
           cleanupRecording();
           return;
         }
@@ -1587,7 +1589,6 @@ function App() {
           <div className="brand-row">
             <span className="brand-kicker">Sadilek Innovation Lab</span>
             <div className="theme-toggle">
-              <span className="theme-toggle-label">Theme</span>
               <button
                 className="theme-toggle-btn"
                 onClick={() => setDarkMode(!darkMode)}
@@ -1607,7 +1608,6 @@ function App() {
                     <path d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07l1.77-1.77M17.3 6.7l1.77-1.77" />
                   </svg>
                 )}
-                <span>{darkMode ? 'Dark' : 'Light'}</span>
               </button>
             </div>
           </div>
@@ -1617,9 +1617,7 @@ function App() {
           </h1>
           <p>
             A local-first, frontend-only capture flow for recording screen, mic, and camera input
-            directly in your browser. Files are generated on your computer and stay in your session
-            until you save or share them. Free and open source, built in May 2025 from a Bolt DIY
-            start, refined through June, and finally a 2026 design pass.
+            directly in your browser.
           </p>
           <div className="intro-meta" aria-label="Recorder highlights">
             <span>Free + open source</span>
@@ -1727,7 +1725,7 @@ function App() {
                       </label>
                       {recordOptions.screenIds.length > 0 && (
                         <div className="device-submenu">
-                          {!isMobile ? (
+                          {supportsDisplayMedia ? (
                             <>
                               {screenDevices.map((device) => (
                                 <label key={device.deviceId}>
@@ -1775,6 +1773,11 @@ function App() {
                               <p className="submenu-hint">
                                 Add one slot per display, then pick each exact screen in the browser prompt.
                               </p>
+                              {isMobile && (
+                                <p className="submenu-hint">
+                                  Screen capture usually is not available on mobile browsers, but this app will try when the browser exposes it.
+                                </p>
+                              )}
                               {/* Resolution dropdown for screen */}
                               <div className="settings-row submenu-dropdown">
                                 <div className="settings-label">Resolution:</div>
@@ -1793,8 +1796,8 @@ function App() {
                               </div>
                             </>
                           ) : (
-                            <p style={{ color: '#bbb', fontSize: '0.85rem', marginTop: '0.5rem' }}>
-                              Screen recording is not supported on mobile devices.
+                            <p className="submenu-hint">
+                              This browser does not expose screen capture, so screen recording may be unavailable here.
                             </p>
                           )}
                         </div>
@@ -2368,7 +2371,7 @@ function App() {
               href="https://www.sadilekinnovation.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="footer-link"
+              className="footer-link footer-brand-link"
             >
               Sadilek Innovation
             </a>

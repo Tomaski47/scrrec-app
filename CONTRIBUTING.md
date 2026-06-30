@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-The local app runs on port `5173` by default.
+The local app currently runs on port `5174` by default. Use `npm run dev:5174` for the strict local server script, or pass a Vite `--port` override for ad-hoc testing.
 
 ## Development Guidelines
 

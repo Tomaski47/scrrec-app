@@ -1,10 +1,10 @@
 # Known Issues and Future Work
 
-Last updated: June 10, 2026
+Last updated: June 30, 2026
 
 ## Locked Baseline
 
-- Screen capture supports one or more screen slots, with each slot using the browser display picker and saving as a separate recording.
+- Screen capture supports one or more screen slots, with each slot using the browser display picker and saving as a separate recording when the browser exposes `getDisplayMedia`.
 - Desktop microphone capture supports the OS default input, named physical inputs, gain, input metering, echo cancellation, noise suppression, and auto gain controls.
 - Camera capture supports browser-exposed camera devices, with mobile front/rear fallback behavior kept to one active camera at a time when the browser does not expose separate stable device IDs.
 
@@ -26,7 +26,7 @@ This is why the app keeps `Refresh mics` as a quiet enumeration action and `Scan
 
 ### Screen and Camera Decisions
 
-Browsers do not enumerate screens the same way they enumerate cameras and microphones. The app uses screen slots instead: each selected slot opens the browser display picker, and each chosen display records as a separate file. For mobile cameras, front/rear fallback labels are kept single-choice when the browser does not expose stable IDs, because simultaneous front/rear mobile capture is not reliable in current browser behavior.
+Browsers do not enumerate screens the same way they enumerate cameras and microphones. The app uses screen slots instead: each selected slot opens the browser display picker, and each chosen display records as a separate file. Screen capture is capability-based rather than viewport-based: mobile-sized layouts still show the screen controls if the browser exposes `getDisplayMedia`, but many actual mobile browsers do not expose that API. For mobile cameras, front/rear fallback labels are kept single-choice when the browser does not expose stable IDs, because simultaneous front/rear mobile capture is not reliable in current browser behavior.
 
 ## Future Work
 

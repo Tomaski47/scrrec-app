@@ -43,10 +43,22 @@ Run the local dev server:
 npm run dev
 ```
 
-The Vite config is pinned to port `5173`. The app is usually available at:
+The Vite config currently defaults to port `5174` for local development. The app is usually available at:
 
 ```text
-http://localhost:5173/
+http://localhost:5174/
+```
+
+For a strict local-only server on that port, use:
+
+```bash
+npm run dev:5174
+```
+
+You can also override the port for ad-hoc testing, for example:
+
+```bash
+npx vite --port 5175
 ```
 
 Build the static bundle:
@@ -87,7 +99,7 @@ http://localhost:8080/
 ## Browser Notes
 
 - Desktop Chromium browsers generally provide the broadest screen, camera, and microphone support.
-- Screen capture is not available on many mobile browsers.
+- Screen capture is not available on many mobile browsers, but the app does not block by viewport size. If a browser exposes `getDisplayMedia`, the screen picker can be tried.
 - Mobile front/rear camera behavior depends on whether the browser exposes stable camera device IDs.
 - Apple Continuity and iPhone microphones are browser/OS-dependent. See [Known Issues and Future Work](docs/KNOWN_ISSUES_AND_FUTURE_WORK.md).
 

@@ -1522,24 +1522,15 @@ body.light-mode {
   flex-shrink: 0;
 }
 
-.theme-toggle-label {
-  color: #918a7c;
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
 .theme-toggle-btn {
-  width: auto;
+  width: 38px;
   height: 38px;
-  min-width: 92px;
+  min-width: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
   margin: 0;
-  padding: 0 13px;
+  padding: 0;
   border: 1px solid rgba(247, 243, 232, 0.18);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
@@ -1585,10 +1576,6 @@ body.light-mode {
 
 .theme-icon-sun::after {
   transform: rotate(90deg);
-}
-
-.App.light-mode .theme-toggle-label {
-  color: #6f6a5f;
 }
 
 .App.light-mode .theme-toggle-btn {
@@ -2635,10 +2622,6 @@ body.light-mode,
   color: #007d75;
 }
 
-.App.light-mode .theme-toggle-label {
-  color: #5d5b66;
-}
-
 .App.light-mode .theme-toggle-btn {
   color: #172033;
   background:
@@ -2826,10 +2809,6 @@ body.light-mode,
 .App.light-mode .panel-kicker,
 .App.light-mode .legal-eyebrow {
   color: #00a99a;
-}
-
-.App.light-mode .theme-toggle-label {
-  color: #555b68;
 }
 
 .App.light-mode .theme-toggle-btn {
@@ -3043,6 +3022,37 @@ body.light-mode,
 .project-notes-body a,
 .app-footer a {
   color: inherit;
+}
+
+.copyright .footer-brand-link {
+  color: transparent;
+  background: linear-gradient(90deg, #30ffd7 0%, #35a8ff 48%, #ff4fd8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 0.92rem;
+  font-weight: 900;
+  opacity: 1;
+  text-decoration: none;
+}
+
+.copyright .footer-brand-link:hover {
+  filter: brightness(1.12);
+  opacity: 1;
+  text-decoration: none;
+}
+
+.app-footer .footer-actions .footer-link,
+.app-footer .footer-actions .footer-button {
+  font-size: 0.78rem;
+  opacity: 0.68;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.app-footer .footer-actions .footer-link:hover,
+.app-footer .footer-actions .footer-button:hover {
+  opacity: 0.9;
 }
 
 .project-notes-body a:hover {
@@ -3439,5 +3449,154 @@ button.mini-action:hover {
 @media (max-width: 700px) {
   .option-block .device-submenu {
     padding-inline: 16px;
+  }
+}
+
+/* Responsive polish pass */
+.brand-row {
+  flex-wrap: nowrap;
+}
+
+.theme-toggle {
+  margin-left: auto;
+}
+
+.theme-toggle-btn {
+  flex: 0 0 38px;
+}
+
+.recorder-panel .settings-row[style],
+.recorder-panel .settings-control[style],
+.recorder-panel .display-center,
+.recorder-panel .checkbox-group,
+.recorder-panel .option-block,
+.recorder-panel .device-submenu,
+.recorder-panel .submenu-dropdown,
+.recorder-panel .mic-meter,
+.recorder-panel .settings-panel {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.recorder-panel .settings-row[style] {
+  padding: 0 !important;
+}
+
+@media (max-width: 700px) {
+  .brand-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand-kicker {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .recorder-panel.App-header {
+    padding: 22px 18px 28px;
+  }
+
+  .recorder-panel .settings-row[style],
+  .recorder-panel .settings-grid[style],
+  .recorder-panel .settings-control[style] {
+    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .recorder-panel .checkbox-group {
+    gap: 10px;
+  }
+
+  .recorder-panel .option-block {
+    width: 100%;
+  }
+
+  .option-block .device-submenu {
+    padding: 0 14px 14px;
+  }
+
+  .device-submenu label {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .device-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .action-buttons,
+  .recorder-panel .action-buttons {
+    gap: 12px;
+    margin-top: 28px;
+  }
+
+  .recorder-panel .action-buttons button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    min-width: 128px;
+    height: 46px;
+    min-height: 0;
+    max-width: calc(50% - 6px);
+    padding: 0 14px;
+    font-size: 0.9rem;
+    line-height: 1;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 430px) {
+  .App {
+    padding-inline: 12px;
+  }
+
+  .recorder-panel.App-header {
+    padding-inline: 16px;
+  }
+
+  .recorder-heading h2 {
+    font-size: 1.42rem;
+  }
+
+  .recorder-panel .action-buttons button {
+    min-width: 124px;
+    padding-inline: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .brand-row {
+    gap: 10px;
+  }
+
+  .brand-kicker {
+    font-size: 0.72rem;
+  }
+
+  .theme-toggle-btn {
+    flex-basis: 36px;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+  }
+
+  .recorder-panel.App-header {
+    padding-inline: 14px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .recorder-panel .action-buttons button {
+    max-width: 180px;
+    width: 100%;
   }
 }
