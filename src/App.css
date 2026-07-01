@@ -3600,3 +3600,106 @@ button.mini-action:hover {
     width: 100%;
   }
 }
+
+/* Light mode panel tone pass */
+body.light-mode {
+  background: #e9eef1;
+}
+
+.App.light-mode {
+  background:
+    linear-gradient(135deg, #e9eef1 0%, #f0edf4 50%, #e7f1ee 100%);
+}
+
+.App.light-mode::before {
+  opacity: 0.24;
+  background:
+    linear-gradient(120deg, rgba(31, 203, 187, 0.06), transparent 42%, rgba(226, 79, 190, 0.045) 76%, transparent);
+}
+
+.App.light-mode .project-notes {
+  background:
+    linear-gradient(135deg, rgba(249, 244, 255, 0.9) 0%, rgba(245, 248, 255, 0.92) 54%, rgba(241, 253, 250, 0.88) 100%) padding-box,
+    linear-gradient(115deg, rgba(151, 104, 232, 0.78), rgba(226, 79, 190, 0.72)) border-box;
+  box-shadow: 0 18px 42px rgba(117, 80, 190, 0.06);
+}
+
+.App.light-mode .project-notes summary {
+  background: rgba(248, 241, 255, 0.48);
+}
+
+.App.light-mode .project-notes[open] summary {
+  border-bottom: 1px solid rgba(165, 111, 255, 0.16);
+}
+
+.App.light-mode .project-notes[open] .project-notes-body {
+  padding-top: 16px;
+}
+
+.App.light-mode .recorder-panel.App-header {
+  background:
+    radial-gradient(ellipse at 10% 28%, rgba(31, 203, 187, 0.15), transparent 42%) padding-box,
+    radial-gradient(ellipse at 18% 82%, rgba(31, 203, 187, 0.07), transparent 36%) padding-box,
+    radial-gradient(circle at 88% 8%, rgba(151, 104, 232, 0.09), transparent 32%) padding-box,
+    linear-gradient(155deg, rgba(244, 253, 250, 0.92) 0%, rgba(245, 249, 253, 0.94) 58%, rgba(247, 243, 255, 0.88) 100%) padding-box,
+    linear-gradient(115deg, rgba(151, 104, 232, 0.66), rgba(226, 79, 190, 0.5)) border-box;
+  box-shadow:
+    0 26px 58px rgba(48, 120, 170, 0.07),
+    0 0 42px rgba(31, 203, 187, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+.App.light-mode .option-block {
+  background:
+    linear-gradient(135deg, rgba(252, 255, 254, 0.97) 0%, rgba(244, 250, 253, 0.97) 100%) padding-box,
+    linear-gradient(115deg, rgba(22, 176, 164, 0.7), rgba(48, 135, 210, 0.52)) border-box;
+  box-shadow:
+    0 8px 22px rgba(45, 128, 160, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.App.light-mode .option-block:hover,
+.App.light-mode .option-block.has-submenu {
+  background:
+    linear-gradient(135deg, rgba(242, 252, 250, 0.98) 0%, rgba(239, 247, 253, 0.98) 100%) padding-box,
+    linear-gradient(115deg, rgba(28, 202, 185, 0.78), rgba(54, 137, 211, 0.66)) border-box;
+  box-shadow:
+    0 14px 32px rgba(35, 126, 165, 0.11),
+    0 0 26px rgba(31, 203, 187, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.App.light-mode .device-permission {
+  color: #4f5869 !important;
+}
+
+.App.light-mode .device-permission.status-granted,
+.App.light-mode .device-label .device-permission:last-child {
+  color: #167a70 !important;
+}
+
+.App.light-mode .btn-disabled {
+  color: #6f6878;
+  background: linear-gradient(90deg, rgba(225, 216, 235, 0.92), rgba(238, 222, 232, 0.92)) !important;
+  border: 1px solid rgba(151, 104, 232, 0.16);
+  box-shadow: none;
+}
+
+.App.light-mode .intro-meta span {
+  background:
+    linear-gradient(135deg, rgba(232, 255, 250, 0.88), rgba(236, 248, 255, 0.88)) padding-box,
+    linear-gradient(115deg, #1fe5d1, #37aefe) border-box;
+}
+
+.App.light-mode .intro-meta span:nth-child(2) {
+  background:
+    linear-gradient(135deg, rgba(249, 241, 255, 0.88), rgba(255, 241, 252, 0.88)) padding-box,
+    linear-gradient(115deg, #a56fff, #f05ad0) border-box;
+}
+
+.App.light-mode .copyright .footer-brand-link {
+  background: linear-gradient(90deg, #00a99a 0%, #168cff 48%, #d63bc1 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
