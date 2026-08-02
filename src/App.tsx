@@ -28,6 +28,33 @@ const getBrowserInfo = () => {
   return { isChrome, isSafari, isFirefox, isEdge, isIncognito, isMobileSafari };
 };
 
+const getDisplayCaptureErrorMessage = (screenLabel: string, err: unknown) => {
+  const technicalError = getErrorMessage(err);
+
+  if (!technicalError.toLowerCase().includes('timeout starting video source')) {
+    return `Could not get ${screenLabel} stream.\nError: ${technicalError}`;
+  }
+
+  const { isChrome, isSafari, isFirefox, isEdge } = getBrowserInfo();
+  const browserName = isChrome
+    ? 'Chrome'
+    : isEdge
+      ? 'Microsoft Edge'
+      : isSafari
+        ? 'Safari'
+        : isFirefox
+          ? 'Firefox'
+          : 'The browser';
+  const restartTarget = browserName === 'The browser' ? 'your browser' : browserName;
+  const isMac = /Macintosh|Mac OS X/.test(navigator.userAgent);
+  const quitShortcut = isMac ? ' (⌘Q)' : '';
+  const permissionHelp = isMac
+    ? `If it still fails, open System Settings → Privacy & Security → Screen & System Audio Recording and make sure ${restartTarget} is enabled.`
+    : 'If it still fails, restart your computer and verify that your browser has permission to capture the screen.';
+
+  return `${browserName} could not finish starting ${screenLabel} capture.\n\nFully quit ${restartTarget}${quitShortcut}, reopen it, and try again. Opening a new tab will not reset the shared capture process.\n\n${permissionHelp}\n\nTechnical error: ${technicalError}`;
+};
+
 // Utility function to generate a filename for recordings
 const generateFilename = (streamType: string, resolution?: string): string => {
   const now = new Date();
@@ -1246,7 +1273,7 @@ function App() {
             activeStreamsRef.current.push(streams[screenId]);
             streamKeys.push(screenId);
           } catch (err) {
-            setPermissionError(`Could not get ${screenLabel} stream.\nError: ` + getErrorMessage(err));
+            setPermissionError(getDisplayCaptureErrorMessage(screenLabel, err));
             cleanupRecording();
             return;
           }
