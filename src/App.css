@@ -1,4 +1,31 @@
 /* Audio-only mode visual cue */
+.app-dialog {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border: 1px solid #a56fff;
+  border-radius: 16px;
+  background: #181824;
+  color: #f5f3ff;
+  box-shadow: 0 20px 80px #0008;
+}
+.app-dialog::backdrop { background: #070710b8; }
+.app-dialog-content { padding: 24px; text-align: left; }
+.app-dialog-heading { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.app-dialog-heading h2 { margin: 0; }
+.app-dialog-heading button { font-size: 1.6rem; padding: 8px 12px; }
+body.light-mode .app-dialog { background: #f6f8fc; color: #151b28; }
+.recording-library { width: 100%; margin-top: 28px; }
+.recording-card { margin: 24px auto; padding: 16px; max-width: 650px; border: 1px solid #7b73a4; border-radius: 12px; }
+.recording-card video { width: 100%; max-height: 420px; object-fit: contain; }
+.recording-card audio { max-width: 100%; }
+.recording-metadata, .capture-note, .save-feedback { font-size: 0.9rem; line-height: 1.5; overflow-wrap: anywhere; }
+.capture-note { max-width: 580px; margin: 16px auto; }
+:is(button, input, select, summary, a):focus-visible { outline: 3px solid #ad78ff; outline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
 .audio-only {
   border: 2px dashed #beadff;
   background: #232326;

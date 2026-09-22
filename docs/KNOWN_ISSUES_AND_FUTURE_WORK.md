@@ -1,6 +1,6 @@
 # Known Issues and Future Work
 
-Last updated: June 30, 2026
+Last updated: September 22, 2026
 
 ## Locked Baseline
 
@@ -47,8 +47,16 @@ The likely future direction is to investigate whether macOS Continuity devices c
 
 iPhone Safari/Chrome may expose front and rear camera choices, but mobile browsers often allow only one active camera stream at a time. The current app keeps front/rear fallback cameras mutually exclusive on mobile. Future work can revisit simultaneous front/rear capture if browser support improves or if this becomes a native-app feature.
 
-### Recording Flow Polish
+### Reliability Baseline (0.2.0)
 
-- Confirm combined multi-source recordings across desktop Chrome, Safari, and mobile Safari.
-- Add clearer success states after each file is generated.
-- Consider a lightweight diagnostics drawer that reports which media devices the browser currently exposes, without logging full device IDs.
+The release candidate retains completed files independently of selected sources and new capture attempts, locks startup while permissions are pending, finalizes all recorders when a source ends, and releases tracks and audio contexts on failure. Downloads follow the actual encoder container. Multiple microphones are mixed to one track per video and still saved individually. Files remain in memory; a reload, closed tab, crash, or explicit Clear All loses them. A download confirmation means the browser started the download, not that disk persistence has been verified.
+
+### Prioritized Roadmap
+
+1. **Release acceptance:** physical screen/camera/mic capture across Chrome, Firefox, Safari and iPhone Safari; a 30-minute recording; simultaneous-source playback and audio synchronization. Synthetic Chromium coverage is available, but does not prove hardware/browser compatibility. See [release checklist](RELEASE_0.2.0.md).
+2. **Long recordings and recovery:** measure memory growth, add a useful duration/size warning, and investigate incremental file writing or IndexedDB recovery. Keep explicit local-storage controls and a browser fallback.
+3. **Maintainability:** extract device enumeration, microphone metering, and camera capability logic from `App.tsx`; consolidate duplicate CSS using visual comparisons. The recorder lifecycle and completed-output UI are already separate modules.
+4. **Support diagnostics:** add an opt-in, redacted capability summary with browser/version and permission state; omit device IDs and recording content.
+5. **Optional expansion:** explicit tab/system-audio capture with capability-dependent UI, then a composed screen-plus-camera output if user demand warrants it. Current videos are separate outputs, not a composite.
+
+Continuity microphones and simultaneous mobile cameras remain exploratory work rather than release guarantees.

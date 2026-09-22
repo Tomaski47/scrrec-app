@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
+import { RecordingSession, AUDIO_BITRATES, type AudioQuality, type CompletedRecording, type SessionState, type Acquisition, type RecordingSource } from './recorder/session';
+import { Modal } from './components/Modal';
+import { RecordingList } from './components/RecordingList';
 
 type WebkitAudioWindow = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext;
@@ -18,11 +21,11 @@ const getAudioContextCtor = () => (
 // Utility function to detect browser type
 const getBrowserInfo = () => {
   const ua = navigator.userAgent;
-  const isChrome = /Chrome/.test(ua) && /Google Inc/.test(navigator.vendor) && !/OPR/.test(ua) && !/Edge/.test(ua);
+  const isChrome = /Chrome/.test(ua) && /Google Inc/.test(navigator.vendor) && !/OPR/.test(ua) && !/Edg/.test(ua);
   const isSafari = /Safari/.test(ua) && /Apple Computer/.test(navigator.vendor) && !/Chrome/.test(ua) && !/CriOS/.test(ua);
   const isFirefox = /Firefox/.test(ua);
   const isEdge = /Edg/.test(ua);
-  const isIncognito = !navigator.storage || !navigator.storage.estimate;
+  const isIncognito = false; // Private browsing cannot be reliably inferred from storage API availability.
   const isMobileSafari = /Safari/.test(ua) && /iPhone|iPad|iPod/.test(ua) && !/Chrome/.test(ua) && !/CriOS/.test(ua);
   
   return { isChrome, isSafari, isFirefox, isEdge, isIncognito, isMobileSafari };
@@ -55,51 +58,18 @@ const getDisplayCaptureErrorMessage = (screenLabel: string, err: unknown) => {
   return `${browserName} could not finish starting ${screenLabel} capture.\n\nFully quit ${restartTarget}${quitShortcut}, reopen it, and try again. Opening a new tab will not reset the shared capture process.\n\n${permissionHelp}\n\nTechnical error: ${technicalError}`;
 };
 
-// Utility function to generate a filename for recordings
-const generateFilename = (streamType: string, resolution?: string): string => {
-  const now = new Date();
-  const formattedDate = now.toLocaleDateString("en-US", {
-    month: "2-digit",
-    day: "2-digit",
-    year: "2-digit",
-  }).replace(/\//g, "-");
-
-  const formattedTime = now.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).toLowerCase().replace(":", "").replace(" ", "");
-
-  let deviceName = "recording";
-  if (streamType === "cam") {
-    deviceName = "cam";
-  } else if (streamType === "mic") {
-    deviceName = "mic";
-  } else if (streamType === "screen") {
-    const selectedResolution = resolution;
-    const resolutionPart = selectedResolution && selectedResolution !== "fullscreen"
-      ? selectedResolution.toLowerCase()
-      : "";
-    const resolutionTag = resolutionPart ? `screen${resolutionPart}` : "screen";
-    return `${resolutionTag}_${formattedDate}_${formattedTime}.webm`;
-  }
-
-  return `${deviceName}_${formattedDate}_${formattedTime}.webm`;
-};
-
 // Get camera capabilities
 const getCameraCapabilities = async (deviceId: string): Promise<string[]> => {
+  let stream: MediaStream | undefined;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    stream = await navigator.mediaDevices.getUserMedia({
       video: { deviceId: { exact: deviceId } }
     });
     const track = stream.getVideoTracks()[0];
     const capabilities = track.getCapabilities ? track.getCapabilities() : null;
-    track.stop();
-    
     if (capabilities && capabilities.width && capabilities.height) {
-      const maxWidth = capabilities.width.max;
-      const maxHeight = capabilities.height.max;
+      const maxWidth = capabilities.width.max ?? 0;
+      const maxHeight = capabilities.height.max ?? 0;
       const resolutions = [];
       
       // Common resolutions to check
@@ -118,11 +88,13 @@ const getCameraCapabilities = async (deviceId: string): Promise<string[]> => {
         }
       }
       
-      return resolutions;
+      return resolutions.length ? resolutions : ["1080p", "720p", "480p"];
     }
     return ["1080p", "720p", "480p"];
   } catch {
     return ["1080p", "720p", "480p"];
+  } finally {
+    stream?.getTracks().forEach(track => track.stop());
   }
 };
 
@@ -237,10 +209,10 @@ const stackDetails = [
   'React 18, TypeScript, and Vite 6 for the frontend app shell.',
   'Browser MediaDevices, getDisplayMedia, getUserMedia, and MediaRecorder APIs for capture.',
   'Web Audio API GainNode and AnalyserNode support microphone gain and peak-level metering.',
-  'file-saver and mime support download/export handling.',
+  'Native Blob, download and Web Share APIs handle local export with the actual recording format.',
   'Docker and nginx are included for static deployment hosting.',
   'Tailwind/PostCSS tooling exists in the project, while the 2026 refresh and functional controls are primarily custom CSS.',
-  'Vite local serving currently defaults to port 5174, with LAN/Tailscale host access available for phone-device testing.',
+  'Vite serves localhost on port 5174. Phone testing requires a separately configured secure HTTPS connection.',
 ];
 
 const toolNotes = [
@@ -515,11 +487,6 @@ const createScreenDevice = (slotNumber: number): ScreenDevice => ({
   label: `Screen ${slotNumber}`,
 });
 
-const getScreenSlotNumber = (screenId: string): number => {
-  const match = screenId.match(/(\d+)$/);
-  return match ? Number(match[1]) : 1;
-};
-
 function App() {
   // Dark mode state
   const [darkMode, setDarkMode] = useState(true);
@@ -527,17 +494,19 @@ function App() {
   
   // State declarations
   const [showClearConfirmation, setShowClearConfirmation] = useState(false);
-  const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
   const [permissionStatus, setPermissionStatus] = useState<Record<string, string>>({});
-  const [audioQuality, setAudioQuality] = useState('best');
+  const [audioQuality, setAudioQuality] = useState<AudioQuality>('best');
   const [videoResolution, setVideoResolution] = useState<VideoResolution>('fullscreen');
   const [cameraResolutions, setCameraResolutions] = useState<{[deviceId: string]: string}>({});
   const [availableCameraResolutions, setAvailableCameraResolutions] = useState<{[deviceId: string]: string[]}>({});
   const [permissionError, setPermissionError] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [mediaRecorders, setMediaRecorders] = useState<{[key:string]: MediaRecorder | null}>({});
-  const [videoUrls, setVideoUrls] = useState<{[key:string]: string | null}>({});
-  const [audioUrls, setAudioUrls] = useState<{[key:string]: string | null}>({});
+  const [deviceBusy, setDeviceBusy] = useState(false);
+  const deviceOperationsRef = useRef(0);
+  const [sessionState, setSessionState] = useState<SessionState>('idle');
+  const recording = sessionState !== 'idle'; // Lock every source control during acquisition/finalization too.
+  const [recordings, setRecordings] = useState<CompletedRecording[]>([]);
+  const [screenPrompt, setScreenPrompt] = useState<{ label: string; choose: () => void; cancel: () => void } | null>(null);
+  const sessionRef = useRef<RecordingSession | null>(null);
   const [supportsDisplayMedia, setSupportsDisplayMedia] = useState(true);
   const [recordOptions, setRecordOptions] = useState({
     screenIds: [] as string[],
@@ -559,13 +528,10 @@ function App() {
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordingSize, setRecordingSize] = useState(0);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
   const [hasRequestedAudioPermission, setHasRequestedAudioPermission] = useState(false);
   const [hasRequestedVideoPermission, setHasRequestedVideoPermission] = useState(false);
 
   // Refs
-  const activeStreamsRef = useRef<MediaStream[]>([]);
-  const audioContextsRef = useRef<AudioContext[]>([]);
   const audioGainRef = useRef(audioProcessing.gain);
   const micMeterRequestRef = useRef(0);
   const micMeterRef = useRef<{
@@ -575,17 +541,9 @@ function App() {
     source: MediaStreamAudioSourceNode;
     rafId: number | null;
   } | null>(null);
-  const chunks = useRef<{[key:string]: Blob[]}>({});
-  const clearConfirmationRef = useRef<HTMLDivElement>(null);
 
   // Constants
   const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const bitsPerSecond = {
-    low: 2_000_000,
-    mid: 4_000_000,
-    best: 8_000_000,
-  };
-
   // Update document title
   useEffect(() => {
     document.title = "Screen Recorder | Sadilek Innovation";
@@ -602,29 +560,13 @@ function App() {
     }
   }, [darkMode]);
 
-  // Download helper function
-  const handleDownload = (blobOrChunks: Blob[] | Blob, fileName: string, deviceName?: string, mimeType = 'video/webm') => {
-    let blob: Blob;
-    if (Array.isArray(blobOrChunks)) {
-      blob = new Blob(blobOrChunks, { type: mimeType });
-    } else {
-      blob = blobOrChunks;
-    }
-    try {
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = fileName;
-      link.click();
-      setTimeout(() => {
-        URL.revokeObjectURL(link.href);
-      }, 1000);
-      setTimeout(() => {
-        if (deviceName) {
-          setSavedStatus(prev => ({ ...prev, [deviceName]: true }));
-        }
-      }, 2500);
-    } catch (error) {
-      console.error("Download failed:", error);
+  const withDeviceSetup = async <T,>(task: () => Promise<T>): Promise<T> => {
+    deviceOperationsRef.current += 1;
+    setDeviceBusy(true);
+    try { return await task(); }
+    finally {
+      deviceOperationsRef.current -= 1;
+      setDeviceBusy(deviceOperationsRef.current > 0);
     }
   };
 
@@ -643,7 +585,7 @@ function App() {
     setPermissionStatus(statuses);
   };
 
-  const loadCameraResolutions = async (devices: MediaDeviceInfo[]) => {
+  const loadCameraResolutions = (devices: MediaDeviceInfo[]) => withDeviceSetup(async () => {
     for (const camera of devices) {
       if (availableCameraResolutions[camera.deviceId]) continue;
 
@@ -670,7 +612,7 @@ function App() {
         [camera.deviceId]: prev[camera.deviceId] || resolutions[0] || '1080p'
       }));
     }
-  };
+  });
 
   // Get available devices without requesting permissions
   const getAvailableDevices = async (
@@ -678,7 +620,7 @@ function App() {
     permissionTarget: PermissionTarget = 'all',
     hasFreshAudioAccess = false,
     forcePermissionRefresh = false
-  ) => {
+  ) => withDeviceSetup(async () => {
     try {
       const needsAudio = permissionTarget === 'all' || permissionTarget === 'audio';
       const needsVideo = permissionTarget === 'all' || permissionTarget === 'video';
@@ -778,56 +720,13 @@ function App() {
       setCameraDevices(videoDevices);
       setMicDevices(audioDevices);
       
-      if (requestPermissions || hasRequestedVideoPermission) {
-        await loadCameraResolutions(videoDevices);
-      }
 
       return { videoDevices, audioDevices };
-    } catch (error) {
-      console.error('Error enumerating devices:', error);
+    } catch {
+      console.warn('Could not enumerate media devices.');
       return { videoDevices: [] as MediaDeviceInfo[], audioDevices: [] as MediaDeviceInfo[] };
     }
-  };
-
-  // Get recorder options
-  const getRecorderOptions = (hasVideo: boolean, hasAudio: boolean) => {
-    const videoMimeTypes = [
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm;codecs=h264,opus',
-      'video/webm',
-      'video/mp4'
-    ];
-    
-    const audioMimeTypes = [
-      'audio/webm;codecs=opus',
-      'audio/webm',
-      'audio/mp4',
-      'audio/aac'
-    ];
-    
-    let mimeType = '';
-    const mimeTypes = hasVideo ? videoMimeTypes : audioMimeTypes;
-    
-    for (const type of mimeTypes) {
-      if (MediaRecorder.isTypeSupported(type)) {
-        mimeType = type;
-        break;
-      }
-    }
-    
-    if (!mimeType) {
-      mimeType = hasVideo ? 'video/webm' : 'audio/webm';
-    }
-    
-    const options: MediaRecorderOptions = {
-      mimeType,
-      videoBitsPerSecond: hasVideo ? bitsPerSecond['best'] : undefined,
-      audioBitsPerSecond: hasAudio ? bitsPerSecond[audioQuality] : undefined,
-    };
-    
-    return options;
-  };
+  });
 
   // Format time
   function formatTime(sec: number) {
@@ -846,114 +745,6 @@ function App() {
     }
     return `${Math.round(mb)} MB`;
   }
-
-  // Calculate estimated size
-  function calculateEstimatedSize(seconds: number, options: {
-    hasVideo: boolean,
-    videoResolution: string,
-    hasAudio: boolean,
-    audioQuality: string
-  }): number {
-    let totalBitsPerSecond = 0;
-
-    if (options.hasVideo) {
-      switch (options.videoResolution) {
-        case '1080p':
-          totalBitsPerSecond += 1_500_000;
-          break;
-        case '720p':
-          totalBitsPerSecond += 1_000_000;
-          break;
-        case '480p':
-          totalBitsPerSecond += 600_000;
-          break;
-        case '360p':
-          totalBitsPerSecond += 400_000;
-          break;
-        default:
-          totalBitsPerSecond += 1_200_000;
-          break;
-      }
-    }
-
-    if (options.hasAudio) {
-      switch (options.audioQuality) {
-        case 'best':
-          totalBitsPerSecond += 128_000;
-          break;
-        case 'mid':
-          totalBitsPerSecond += 96_000;
-          break;
-        case 'low':
-          totalBitsPerSecond += 64_000;
-          break;
-      }
-    }
-
-    const bytesPerSecond = totalBitsPerSecond / 8;
-    return Math.round(bytesPerSecond * seconds);
-  }
-
-  // Calculate total recording size
-  function calculateTotalRecordingSize() {
-    let total = 0;
-    if (chunks.current) {
-      Object.values(chunks.current).forEach(arr => {
-        if (Array.isArray(arr)) {
-          total += arr.reduce((acc, chunk) => acc + (chunk.size || 0), 0);
-        }
-      });
-    }
-    return total;
-  }
-
-  // Cleanup recording
-  const cleanupRecording = () => {
-    console.log("Cleaning up recording...");
-
-    Object.keys(mediaRecorders).forEach(key => {
-      const recorder = mediaRecorders[key];
-      if (recorder && recorder.state === "recording") {
-        try {
-          recorder.stop();
-          console.log(`Stopped recorder ${key}`);
-        } catch (error) {
-          console.error(`Error stopping recorder ${key}:`, error);
-        }
-      }
-    });
-
-    activeStreamsRef.current.forEach((stream, idx) => {
-      stream.getTracks().forEach(track => {
-        try {
-          track.stop();
-          console.log(`Stopped ${track.kind} track from stream #${idx}`);
-        } catch (err) {
-          console.warn('Error stopping track:', err);
-        }
-      });
-    });
-    activeStreamsRef.current = [];
-
-    audioContextsRef.current.forEach((context) => {
-      if (context.state !== 'closed') {
-        context.close().catch(err => console.warn('Error closing audio context:', err));
-      }
-    });
-    audioContextsRef.current = [];
-
-    // Clean up old video URLs to free memory
-    Object.values(videoUrls).forEach(url => {
-      if (url) URL.revokeObjectURL(url);
-    });
-    Object.values(audioUrls).forEach(url => {
-      if (url) URL.revokeObjectURL(url);
-    });
-
-    setMediaRecorders({});
-    setRecording(false);
-    setRecordingSize(0);
-  };
 
   // Get camera constraints based on resolution
   const getCameraConstraints = (deviceId: string, resolution: string) => {
@@ -1018,11 +809,6 @@ function App() {
     }));
   };
 
-  const generateScreenFilename = (screenId: string, resolution?: string) => {
-    const baseName = generateFilename("screen", resolution);
-    return baseName.replace(/^screen/, `screen${getScreenSlotNumber(screenId)}`);
-  };
-
   const getMicConstraints = (micId: string): MediaTrackConstraints => {
     const constraints: MediaTrackConstraints = {
       echoCancellation: audioProcessing.echoCancellation,
@@ -1037,7 +823,7 @@ function App() {
     return constraints;
   };
 
-  const requestGenericMicAccess = async () => {
+  const requestGenericMicAccess = () => withDeviceSetup(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: getMicConstraints(genericAudioDeviceId),
@@ -1056,25 +842,23 @@ function App() {
       setPermissionError('Could not get microphone access. Check browser and system microphone permissions, then try selecting the microphone again.');
       return false;
     }
-  };
+  });
 
-  const applyMicGain = (stream: MediaStream) => {
+  const applyMicGain = async (stream: MediaStream, owner: Acquisition) => {
     if (audioProcessing.gain === 1) return stream;
-
     const AudioContextCtor = getAudioContextCtor();
-    if (!AudioContextCtor) return stream;
-
+    if (!AudioContextCtor) throw new Error('This browser cannot apply microphone gain. Set gain to 100% and try again.');
     const context = new AudioContextCtor();
+    owner.ownCleanup(() => context.close());
     const source = context.createMediaStreamSource(stream);
     const gainNode = context.createGain();
     const destination = context.createMediaStreamDestination();
-
     gainNode.gain.value = audioProcessing.gain;
     source.connect(gainNode);
     gainNode.connect(destination);
-    audioContextsRef.current.push(context);
-
-    return destination.stream;
+    const output = owner.ownStream(destination.stream);
+    await context.resume();
+    return output;
   };
 
   const stopMicMeter = (invalidatePendingRequest = true) => {
@@ -1096,7 +880,7 @@ function App() {
     setMicLevelPercent(0);
   };
 
-  const startMicMeter = async (micId: string) => {
+  const startMicMeter = (micId: string) => withDeviceSetup(async () => {
     const requestId = micMeterRequestRef.current + 1;
     micMeterRequestRef.current = requestId;
     stopMicMeter(false);
@@ -1104,18 +888,28 @@ function App() {
     const AudioContextCtor = getAudioContextCtor();
     if (!AudioContextCtor) return;
 
+    let pendingStream: MediaStream | undefined;
+    let pendingContext: AudioContext | undefined;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: getMicConstraints(micId),
         video: false,
       });
 
+      pendingStream = stream;
       if (requestId !== micMeterRequestRef.current) {
         stream.getTracks().forEach(track => track.stop());
         return;
       }
 
       const context = new AudioContextCtor() as AudioContext;
+      pendingContext = context;
+      await context.resume();
+      if (requestId !== micMeterRequestRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        await context.close();
+        return;
+      }
       const source = context.createMediaStreamSource(stream);
       const analyser = context.createAnalyser();
       analyser.fftSize = 1024;
@@ -1131,6 +925,8 @@ function App() {
         rafId: null as number | null,
       };
       micMeterRef.current = meter;
+      pendingStream = undefined;
+      pendingContext = undefined;
 
       const updateMeter = () => {
         analyser.getFloatTimeDomainData(data);
@@ -1149,12 +945,14 @@ function App() {
       };
 
       updateMeter();
-    } catch (err) {
-      console.warn('Could not start microphone level meter:', err);
+    } catch {
+      pendingStream?.getTracks().forEach(track => track.stop());
+      if (pendingContext && pendingContext.state !== 'closed') void pendingContext.close();
+      console.warn('Could not start microphone level meter.');
       setMicLevelDb(null);
       setMicLevelPercent(0);
     }
-  };
+  });
 
   const resolveSelectableMic = (device: MediaDeviceInfo) => {
     return device;
@@ -1204,7 +1002,7 @@ function App() {
       micIds = micIds.filter(id => id !== selectableMicId);
     }
 
-    setRecordOptions({ ...recordOptions, mic: true, micIds });
+    setRecordOptions(prev => ({ ...prev, mic: true, micIds }));
     if (micIds.length > 0) {
       void startMicMeter(shouldSelect ? selectableMicId : micIds[0]);
     } else {
@@ -1212,318 +1010,107 @@ function App() {
     }
   };
 
-  // Start recording
-  const startRecording = async () => {
-    try {
-      stopMicMeter();
+  // Each later display picker is opened directly by its own button click.
+  const chooseAdditionalScreen = (label: string, constraints: MediaTrackConstraints, signal: AbortSignal) => new Promise<MediaStream>((resolve, reject) => {
+    const cancel = () => {
+      signal.removeEventListener('abort', cancel);
+      setScreenPrompt(null);
+      reject(new DOMException('Capture cancelled', 'AbortError'));
+    };
+    if (signal.aborted) { cancel(); return; }
+    signal.addEventListener('abort', cancel, { once: true });
+    setScreenPrompt({ label, cancel: () => { void sessionRef.current?.stop(); }, choose: () => {
+      // Do not await device enumeration or other work before this API call.
+      const pending = navigator.mediaDevices.getDisplayMedia({ video: constraints });
+      signal.removeEventListener('abort', cancel);
+      setScreenPrompt(null);
+      pending.then(resolve, reject);
+    } });
+  });
 
-      const needsMicPermission = recordOptions.mic && recordOptions.micIds.length > 0;
-      const needsCameraPermission = recordOptions.cameraIds.length > 0;
-
-      if (needsMicPermission || needsCameraPermission) {
-        const permissionTarget: PermissionTarget = needsMicPermission && needsCameraPermission
-          ? 'all'
-          : needsMicPermission
-            ? 'audio'
-            : 'video';
-        await getAvailableDevices(true, permissionTarget);
-      } else {
-        await getAvailableDevices(false);
-      }
-
-      cleanupRecording();
-      activeStreamsRef.current = [];
-      
-      const getResolutionConstraints = () => {
-        switch (videoResolution) {
-          case '1080p':
-            return { width: 1920, height: 1080 };
-          case '720p':
-            return { width: 1280, height: 720 };
-          case '480p':
-            return { width: 854, height: 480 };
-          case '360p':
-            return { width: 640, height: 360 };
-          case 'fullscreen':
-          default:
-            return {};
-        }
-      };
-
-      const streams: {[key:string]: MediaStream} = {};
-      const streamKeys: string[] = [];
-      const selectedScreenIds = recordOptions.screenIds.filter(screenId =>
-        screenDevices.some(device => device.deviceId === screenId)
-      );
-
-      // Get screen streams if selected. Browsers expose screens through the picker, not enumeration.
-      if (selectedScreenIds.length > 0) {
-        if (!supportsDisplayMedia) {
-          setPermissionError('This browser does not expose screen capture. Screen recording may be unavailable on this device.');
-          cleanupRecording();
-          return;
-        }
-
-        for (const screenId of selectedScreenIds) {
-          const screenLabel = screenDevices.find(device => device.deviceId === screenId)?.label || 'Screen';
-          try {
-            streams[screenId] = await navigator.mediaDevices.getDisplayMedia({
-              video: getResolutionConstraints(),
-            });
-            activeStreamsRef.current.push(streams[screenId]);
-            streamKeys.push(screenId);
-          } catch (err) {
-            setPermissionError(getDisplayCaptureErrorMessage(screenLabel, err));
-            cleanupRecording();
-            return;
-          }
-        }
-      }
-
-      // Get mic streams if selected
-      const micStreams: {[key: string]: MediaStream} = {};
-      if (recordOptions.mic && recordOptions.micIds && recordOptions.micIds.length > 0) {
-        for (const micId of recordOptions.micIds) {
-          try {
-            const micStream = await navigator.mediaDevices.getUserMedia({
-              audio: getMicConstraints(micId),
-              video: false,
-            });
-            activeStreamsRef.current.push(micStream);
-            const processedMicStream = applyMicGain(micStream);
-            if (processedMicStream !== micStream) {
-              activeStreamsRef.current.push(processedMicStream);
-            }
-            micStreams['mic_' + micId] = processedMicStream;
-          } catch (err) {
-            setPermissionError('Could not get microphone: ' + getErrorMessage(err));
-            cleanupRecording();
-            return;
-          }
-        }
-      }
-
-      // Get camera streams if selected
-      if (recordOptions.cameraIds && recordOptions.cameraIds.length > 0) {
-        if (
-          shouldUseSingleMobileCamera(recordOptions.cameraIds) &&
-          recordOptions.cameraIds.length > 1
-        ) {
-          setPermissionError('Mobile browsers usually allow one active camera stream at a time. Choose either Front Camera or Rear Camera, then start recording.');
-          cleanupRecording();
-          return;
-        }
-
-        for (const camId of recordOptions.cameraIds) {
-          try {
-            const resolution = cameraResolutions[camId] || '1080p';
-            const constraints = getCameraConstraints(camId, resolution);
-            
-            const camStream = await navigator.mediaDevices.getUserMedia({
-              video: constraints
-            });
-            streams['camera_' + camId] = camStream;
-            activeStreamsRef.current.push(camStream);
-            streamKeys.push('camera_' + camId);
-          } catch (err) {
-            setPermissionError('Could not access camera: ' + getErrorMessage(err));
-            cleanupRecording();
-            return;
-          }
-        }
-      }
-
-      if (
-        selectedScreenIds.length === 0 &&
-        (!recordOptions.cameraIds || recordOptions.cameraIds.length === 0) &&
-        (!recordOptions.mic || !recordOptions.micIds || recordOptions.micIds.length === 0)
-      ) {
-        setPermissionError('No recording options selected.');
-        return;
-      }
-
-      const newMediaRecorders: {[key:string]: MediaRecorder} = {};
-      const newChunks: {[key:string]: Blob[]} = {};
-      const newVideoUrls: {[key:string]: string | null} = {};
-      const newAudioUrls: {[key:string]: string | null} = {};
-
-      // For each camera stream
-      for (const camKey of Object.keys(streams).filter(k => k.startsWith('camera_'))) {
-        const camStream = streams[camKey];
-        let finalStream = camStream;
-        if (recordOptions.mic && recordOptions.micIds && recordOptions.micIds.length > 0) {
-          const audioTracks = recordOptions.micIds.flatMap(mid =>
-            micStreams['mic_' + mid]?.getAudioTracks() ?? []
-          );
-          const combinedStream = new MediaStream([
-            ...camStream.getVideoTracks(),
-            ...audioTracks,
-          ]);
-          finalStream = combinedStream;
-          activeStreamsRef.current.push(combinedStream);
-        }
-        const recorderOptions = getRecorderOptions(true, recordOptions.mic);
-        newChunks[camKey] = [];
-        const recorder = new MediaRecorder(finalStream, recorderOptions);
-        recorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) {
-            newChunks[camKey].push(e.data);
-            setRecordingSize(prevSize => prevSize + e.data.size);
-          }
-        };
-        recorder.onstop = () => {
-          const videoBlob = new Blob(newChunks[camKey], { type: 'video/webm' });
-          newVideoUrls[camKey] = URL.createObjectURL(videoBlob);
-          setVideoUrls(prev => ({ ...prev, [camKey]: newVideoUrls[camKey] }));
-        };
-        newMediaRecorders[camKey] = recorder;
-        recorder.start(1000);
-      }
-
-      // For each screen stream
-      for (const screenKey of selectedScreenIds.filter(screenId => streams[screenId])) {
-        let finalStream = streams[screenKey];
-        if (recordOptions.mic && recordOptions.micIds && recordOptions.micIds.length > 0) {
-          const audioTracks = recordOptions.micIds.flatMap(mid =>
-            micStreams['mic_' + mid]?.getAudioTracks() ?? []
-          );
-          const combinedStream = new MediaStream([
-            ...streams[screenKey].getVideoTracks(),
-            ...audioTracks,
-          ]);
-          finalStream = combinedStream;
-          activeStreamsRef.current.push(combinedStream);
-        }
-        const recorderOptions = getRecorderOptions(true, recordOptions.mic);
-        newChunks[screenKey] = [];
-        const recorder = new MediaRecorder(finalStream, recorderOptions);
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) {
-            newChunks[screenKey].push(e.data);
-            setRecordingSize(prevSize => prevSize + e.data.size);
-          }
-        };
-        recorder.onstop = () => {
-          const videoBlob = new Blob(newChunks[screenKey], { type: 'video/webm' });
-          newVideoUrls[screenKey] = URL.createObjectURL(videoBlob);
-          setVideoUrls(prev => ({ ...prev, [screenKey]: newVideoUrls[screenKey] }));
-        };
-        newMediaRecorders[screenKey] = recorder;
-        recorder.start(1000);
-      }
-
-      // For each mic stream, record audio-only
-      if (recordOptions.mic && recordOptions.micIds && recordOptions.micIds.length > 0) {
-        for (const micId of recordOptions.micIds) {
-          const micKey = 'mic_' + micId;
-          const micStream = micStreams[micKey];
-          if (!micStream) continue;
-          const recorderOptions = getRecorderOptions(false, true);
-          newChunks[micKey] = [];
-          const recorder = new MediaRecorder(micStream, recorderOptions);
-          recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) {
-              newChunks[micKey].push(e.data);
-            }
-          };
-          recorder.onstop = () => {
-            const audioBlob = new Blob(newChunks[micKey], { type: 'audio/webm' });
-            newAudioUrls[micKey] = URL.createObjectURL(audioBlob);
-            setAudioUrls(prev => ({ ...prev, [micKey]: newAudioUrls[micKey] }));
-          };
-          newMediaRecorders[micKey] = recorder;
-          recorder.start(1000);
-        }
-      }
-
-      setMediaRecorders(newMediaRecorders);
-      chunks.current = newChunks;
-      setRecording(true);
-    } catch (err) {
-      console.error('Recording error:', err);
-      cleanupRecording();
-      setPermissionError('Could not start recording: ' + getErrorMessage(err));
+  const startRecording = () => {
+    const session = sessionRef.current;
+    if (!session || session.state !== 'idle' || deviceOperationsRef.current > 0) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setPermissionError('Recording is not supported here. Use a supported browser over HTTPS or localhost.');
+      return;
     }
-  };
-
-  // Stop recording
-  const stopRecording = () => {
-    recordOptions.screenIds.forEach(screenId => {
-      setSavedStatus(prev => ({ ...prev, [screenId]: false }));
-    });
-    recordOptions.cameraIds.forEach(camId => {
-      setSavedStatus(prev => ({ ...prev, ['camera_' + camId]: false }));
-    });
-    recordOptions.micIds.forEach(micId => {
-      setSavedStatus(prev => ({ ...prev, ['mic_' + micId]: false }));
-    });
-    cleanupRecording();
-  };
-
-  // Clear all handlers
-  const handleClearAll = () => {
-    setShowClearConfirmation(true);
-  };
-
-  const confirmClear = () => {
-    // Clean up old URLs
-    Object.values(videoUrls).forEach(url => {
-      if (url) URL.revokeObjectURL(url);
-    });
-    Object.values(audioUrls).forEach(url => {
-      if (url) URL.revokeObjectURL(url);
-    });
-    
-    setRecordedChunks([]);
-    setVideoUrls({});
-    setAudioUrls({});
-    chunks.current = {};
-    setSavedStatus({});
-    setShowClearConfirmation(false);
-  };
-
-  const cancelClear = () => {
-    setShowClearConfirmation(false);
-  };
-
-  // Video preview component with proper orientation
-  const VideoPreview: React.FC<{ src: string; title: string }> = ({ src, title }) => {
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('landscape');
-    
-    useEffect(() => {
-      const video = videoRef.current;
-      if (!video) return;
-      
-      const handleLoadedMetadata = () => {
-        const { videoWidth, videoHeight } = video;
-        if (videoWidth && videoHeight) {
-          setOrientation(videoHeight > videoWidth ? 'portrait' : 'landscape');
+    const micIds = recordOptions.mic ? recordOptions.micIds.filter(id => !isMicUnlockId(id)) : [];
+    if (!recordOptions.screenIds.length && !recordOptions.cameraIds.length && !micIds.length) {
+      setPermissionError('Choose at least one recording source.');
+      return;
+    }
+    stopMicMeter();
+    setSaveMessage(null);
+    void session.start(async owner => {
+      const sources: RecordingSource[] = [];
+      const sizes: Record<VideoResolution, MediaTrackConstraints> = {
+        fullscreen: {}, '1080p': { width: 1920, height: 1080 }, '720p': { width: 1280, height: 720 },
+        '480p': { width: 854, height: 480 }, '360p': { width: 640, height: 360 },
+      };
+      for (const [index, screenId] of recordOptions.screenIds.entries()) {
+        owner.signal.throwIfAborted();
+        const label = screenDevices.find(device => device.deviceId === screenId)?.label || 'Screen';
+        if (!navigator.mediaDevices.getDisplayMedia) throw new Error('This browser does not expose screen capture.');
+        try {
+          const stream = owner.ownStream(await (index === 0
+            ? navigator.mediaDevices.getDisplayMedia({ video: sizes[videoResolution] })
+            : chooseAdditionalScreen(label, sizes[videoResolution], owner.signal)));
+          sources.push({ label, kind: 'screen', stream });
+        } catch (error) {
+          if (owner.signal.aborted) throw error;
+          throw new Error(getDisplayCaptureErrorMessage(label, error), { cause: error });
         }
-      };
-      
-      video.addEventListener('loadedmetadata', handleLoadedMetadata);
-      return () => {
-        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      };
-    }, [src]);
-    
-    return (
-      <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-        <h3>{title}</h3>
-        <video
-          ref={videoRef}
-          src={src}
-          controls
-          className={`video-preview ${orientation === 'portrait' ? 'portrait-video' : ''}`}
-          style={{
-            maxWidth: orientation === 'portrait' ? '300px' : '100%',
-            transform: 'none',
-            objectFit: 'contain'
-          }}
-        />
-      </div>
-    );
+      }
+      const micStreams: MediaStream[] = [];
+      for (const [index, micId] of micIds.entries()) {
+        owner.signal.throwIfAborted();
+        const raw = owner.ownStream(await navigator.mediaDevices.getUserMedia({ audio: getMicConstraints(micId), video: false }));
+        const stream = await applyMicGain(raw, owner);
+        micStreams.push(stream);
+        sources.push({ label: micDevices.find(device => device.deviceId === micId)?.label || `Microphone ${index + 1}`, kind: 'mic', stream });
+      }
+      if (micIds.length) {
+        setHasRequestedAudioPermission(true);
+        setPermissionStatus(prev => ({ ...prev, microphone: 'granted' }));
+      }
+      if (shouldUseSingleMobileCamera(recordOptions.cameraIds) && recordOptions.cameraIds.length > 1) {
+        throw new Error('Choose one mobile fallback camera at a time.');
+      }
+      for (const [index, cameraId] of recordOptions.cameraIds.entries()) {
+        owner.signal.throwIfAborted();
+        const stream = owner.ownStream(await navigator.mediaDevices.getUserMedia({ video: getCameraConstraints(cameraId, cameraResolutions[cameraId] || '1080p'), audio: false }));
+        sources.push({ label: cameraDevices.find(device => device.deviceId === cameraId)?.label || `Camera ${index + 1}`, kind: 'camera', stream });
+      }
+      if (recordOptions.cameraIds.length) setPermissionStatus(prev => ({ ...prev, camera: 'granted' }));
+      // Video containers receive one mixed audio track, not multiple competing tracks.
+      let videoAudio = micStreams[0];
+      if (micStreams.length > 1 && sources.some(source => source.kind !== 'mic')) {
+        const AudioContextCtor = getAudioContextCtor();
+        if (!AudioContextCtor) throw new Error('This browser cannot mix multiple microphones. Choose one microphone.');
+        const context = new AudioContextCtor();
+        owner.ownCleanup(() => context.close());
+        const destination = context.createMediaStreamDestination();
+        micStreams.forEach(stream => {
+          const input = context.createMediaStreamSource(stream);
+          const gain = context.createGain();
+          gain.gain.value = 1 / micStreams.length;
+          input.connect(gain).connect(destination);
+        });
+        videoAudio = owner.ownStream(destination.stream);
+        await context.resume();
+      }
+      return sources.map(source => source.kind !== 'mic' && videoAudio
+        ? { ...source, stream: owner.ownStream(new MediaStream([...source.stream.getVideoTracks(), ...videoAudio.getAudioTracks()])) }
+        : source);
+    }, audioQuality);
+  };
+
+  const stopRecording = () => { void sessionRef.current?.stop(); };
+  const confirmClear = () => {
+    sessionRef.current?.clear();
+    setSaveMessage(null);
+    setShowClearConfirmation(false);
   };
 
   // Browser notice component
@@ -1566,7 +1153,7 @@ function App() {
   useEffect(() => () => stopMicMeter(), []);
 
   useEffect(() => {
-    setSupportsDisplayMedia(typeof navigator.mediaDevices.getDisplayMedia === 'function');
+    setSupportsDisplayMedia(typeof navigator.mediaDevices?.getDisplayMedia === 'function');
   }, []);
 
   useEffect(() => {
@@ -1576,35 +1163,25 @@ function App() {
   }, []);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (recording) {
-      interval = setInterval(() => {
-        setRecordingTime((t) => t + 1);
-      }, 1000);
-    } else {
-      setRecordingTime(0);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [recording]);
+    const session = new RecordingSession({ state: setSessionState, recordings: setRecordings, bytes: setRecordingSize, message: setPermissionError });
+    sessionRef.current = session;
+    return () => { session.dispose(); sessionRef.current = null; };
+  }, []);
 
   useEffect(() => {
-    let allChunks: Blob[] = [];
-    if (chunks.current) {
-      Object.values(chunks.current).forEach(arr => {
-        if (Array.isArray(arr)) {
-          allChunks = allChunks.concat(arr);
-        }
-      });
-    }
-    setRecordedChunks(allChunks);
-  }, [videoUrls, audioUrls]);
+    if (sessionState !== 'recording') { setRecordingTime(0); return; }
+    const update = () => setRecordingTime(Math.floor((Date.now() - (sessionRef.current?.startedAt ?? Date.now())) / 1000));
+    update();
+    const interval = window.setInterval(update, 250);
+    return () => window.clearInterval(interval);
+  }, [sessionState]);
 
-  // Check if share is supported
-  const isShareSupported = () => {
-    return navigator.share !== undefined && navigator.canShare !== undefined;
-  };
+  useEffect(() => {
+    if (!recording && !recordings.length) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [recording, recordings.length]);
 
   const activeLegalDocument = legalModal ? legalDocuments[legalModal] : null;
 
@@ -1743,9 +1320,9 @@ function App() {
                             } else {
                               screenIds = [];
                             }
-                            setRecordOptions({ ...recordOptions, screenIds });
+                            setRecordOptions(prev => ({ ...prev, screenIds }));
                           }}
-                          disabled={recording}
+                          disabled={recording || deviceBusy}
                           className="styled-checkbox"
                         />
                         Screen
@@ -1767,9 +1344,9 @@ function App() {
                                       } else {
                                         screenIds = screenIds.filter((id) => id !== device.deviceId);
                                       }
-                                      setRecordOptions({ ...recordOptions, screenIds });
+                                      setRecordOptions(prev => ({ ...prev, screenIds }));
                                     }}
-                                    disabled={recording}
+                                    disabled={recording || deviceBusy}
                                     className="styled-checkbox"
                                   />
                                   <span className="device-label">
@@ -1782,7 +1359,7 @@ function App() {
                                   type="button"
                                   className="mini-action"
                                   onClick={addScreenSource}
-                                  disabled={recording}
+                                  disabled={recording || deviceBusy}
                                 >
                                   Add screen
                                 </button>
@@ -1791,7 +1368,7 @@ function App() {
                                     type="button"
                                     className="mini-action secondary"
                                     onClick={removeLastScreenSource}
-                                    disabled={recording}
+                                    disabled={recording || deviceBusy}
                                   >
                                     Remove screen
                                   </button>
@@ -1810,9 +1387,10 @@ function App() {
                                 <div className="settings-label">Resolution:</div>
                                 <select
                                   className="control-select"
+                                  aria-label="Screen resolution"
                                   value={videoResolution}
                                   onChange={e => setVideoResolution(e.target.value as VideoResolution)}
-                                  disabled={recording}
+                                  disabled={recording || deviceBusy}
                                 >
                                   <option value="fullscreen">Max available</option>
                                   <option value="1080p">1080p</option>
@@ -1853,13 +1431,13 @@ function App() {
                               const micIds = recordOptions.micIds.length > 0
                                 ? recordOptions.micIds
                                 : shouldAutoSelectMic ? [preferredMicId] : [];
-                              setRecordOptions({ ...recordOptions, mic: true, micIds });
+                              setRecordOptions(prev => ({ ...prev, mic: true, micIds }));
                             } else {
                               stopMicMeter();
-                              setRecordOptions({ ...recordOptions, mic: false, micIds: [] });
+                              setRecordOptions(prev => ({ ...prev, mic: false, micIds: [] }));
                             }
                           }}
-                          disabled={recording}
+                          disabled={recording || deviceBusy}
                           className="styled-checkbox"
                         />
                         Mic
@@ -1877,7 +1455,7 @@ function App() {
                                 onChange={e => {
                                   void handleMicDeviceChange(device, e.target.checked);
                                 }}
-                                disabled={recording || micNeedsExplicitPermission(device)}
+                                disabled={recording || deviceBusy || micNeedsExplicitPermission(device)}
                                 className="styled-checkbox"
                               />
                               <span className="device-label">
@@ -1912,7 +1490,7 @@ function App() {
                                   micIds: reconcileSelectedMicIds(refreshedDevices.audioDevices, prev.micIds),
                                 }));
                               }}
-                              disabled={recording}
+                              disabled={recording || deviceBusy}
                             >
                               Refresh mics
                             </button>
@@ -1929,7 +1507,7 @@ function App() {
                                   micIds: reconcileSelectedMicIds(refreshedDevices.audioDevices, prev.micIds),
                                 }));
                               }}
-                              disabled={recording}
+                              disabled={recording || deviceBusy}
                             >
                               Scan inputs
                             </button>
@@ -1944,13 +1522,12 @@ function App() {
                             <div className="settings-label">Quality:</div>
                             <select
                               className="control-select"
+                              aria-label="Microphone quality"
                               value={audioQuality}
-                              onChange={e => setAudioQuality(e.target.value)}
-                              disabled={recording}
+                              onChange={e => setAudioQuality(e.target.value as AudioQuality)}
+                              disabled={recording || deviceBusy}
                             >
-                              <option value="low">Low (64kbps)</option>
-                              <option value="mid">Mid (128kbps)</option>
-                              <option value="best">Best (256kbps)</option>
+                              {(['low', 'mid', 'best'] as const).map(quality => <option key={quality} value={quality}>{quality[0].toUpperCase() + quality.slice(1)} ({AUDIO_BITRATES[quality] / 1000}kbps)</option>)}
                             </select>
                           </div>
                           <div className="audio-processing-controls">
@@ -1968,7 +1545,7 @@ function App() {
                                     ...prev,
                                     gain: Number(e.target.value)
                                   }))}
-                                  disabled={recording}
+                                  disabled={recording || deviceBusy}
                                   aria-label="Microphone gain"
                                 />
                                 <span className="gain-value">{Math.round(audioProcessing.gain * 100)}%</span>
@@ -2000,7 +1577,7 @@ function App() {
                                   ...prev,
                                   noiseSuppression: e.target.checked
                                 }))}
-                                disabled={recording}
+                                disabled={recording || deviceBusy}
                               />
                               Noise suppression
                             </label>
@@ -2012,7 +1589,7 @@ function App() {
                                   ...prev,
                                   echoCancellation: e.target.checked
                                 }))}
-                                disabled={recording}
+                                disabled={recording || deviceBusy}
                               />
                               Echo cancellation
                             </label>
@@ -2024,7 +1601,7 @@ function App() {
                                   ...prev,
                                   autoGainControl: e.target.checked
                                 }))}
-                                disabled={recording}
+                                disabled={recording || deviceBusy}
                               />
                               Auto gain
                             </label>
@@ -2048,14 +1625,14 @@ function App() {
                                 : cameraDevices;
                               if (availableCameras.length > 0) {
                                 const selectedCamera = availableCameras[0];
-                                setRecordOptions({ ...recordOptions, cameraIds: [selectedCamera.deviceId] });
+                                setRecordOptions(prev => ({ ...prev, cameraIds: [selectedCamera.deviceId] }));
                                 void loadCameraResolutions([selectedCamera]);
                               }
                             } else {
-                              setRecordOptions({ ...recordOptions, cameraIds: [] });
+                              setRecordOptions(prev => ({ ...prev, cameraIds: [] }));
                             }
                           }}
-                          disabled={recording}
+                          disabled={recording || deviceBusy}
                           className="styled-checkbox"
                         />
                         Camera
@@ -2075,7 +1652,7 @@ function App() {
                                   void loadCameraResolutions([selectedCamera]);
                                 }
                               }}
-                              disabled={recording}
+                              disabled={recording || deviceBusy}
                             >
                               Refresh cameras
                             </button>
@@ -2099,9 +1676,9 @@ function App() {
                                     if (e.target.checked) {
                                       void loadCameraResolutions([device]);
                                     }
-                                    setRecordOptions({ ...recordOptions, cameraIds });
+                                    setRecordOptions(prev => ({ ...prev, cameraIds }));
                                   }}
-                                  disabled={recording}
+                                  disabled={recording || deviceBusy}
                                 />
                                 <span className="device-label">{device.label || "Camera"}</span>
                                 <span className="device-permission">
@@ -2114,12 +1691,13 @@ function App() {
                                   <div className="settings-label">Resolution:</div>
                                   <select
                                     className="control-select"
+                                    aria-label={`${device.label || 'Camera'} resolution`}
                                     value={cameraResolutions[device.deviceId] || '1080p'}
                                     onChange={e => setCameraResolutions(prev => ({
                                       ...prev,
                                       [device.deviceId]: e.target.value
                                     }))}
-                                    disabled={recording}
+                                    disabled={recording || deviceBusy}
                                   >
                                     {availableCameraResolutions[device.deviceId].map(res => (
                                       <option key={res} value={res}>{res}</option>
@@ -2138,262 +1716,50 @@ function App() {
             </div>
           </div>
 
+          <p className="capture-note">Screen and camera save as separate videos with your selected microphone audio. Tab/system audio is not captured.</p>
           <div className="action-buttons">
-          <button
-            className="btn"
-            onClick={startRecording}
-            disabled={recording}
-          >
-            Start Recording
-          </button>
-          <button 
-            className={recording ? "neon-stop" : "btn-disabled"} 
-            onClick={stopRecording} 
-            disabled={!recording}
-          >
-            Stop Recording
-          </button>
-        </div>
-
-        {/* Permission error modal */}
-        {permissionError && (
-          <div className="custom-modal">
-            <div className="modal-content">
-              <p style={{ whiteSpace: "pre-line" }}>
-                {permissionError}
-              </p>
-              <button onClick={() => setPermissionError(null)} className="btn neon-stop">
-                OK
-              </button>
-            </div>
-          </div>
-        )}
-
-        {recording && (
-          <>
-            <div className="recording-timer">
-              Recording: {formatTime(recordingTime)}
-            </div>
-            <div className={`recording-size${
-              recordingSize > 1024 * 1024 * 1024 ? ' danger' : 
-              recordingSize > 500 * 1024 * 1024 ? ' warning' : ''
-            }`}>
-              {formatSize(calculateTotalRecordingSize() || calculateEstimatedSize(recordingTime, {
-                hasVideo: recordOptions.screenIds.length > 0 || recordOptions.cameraIds.length > 0,
-                videoResolution,
-                hasAudio: recordOptions.mic && recordOptions.micIds.length > 0,
-                audioQuality
-              }))}
-              {recordingSize > 1024 * 1024 * 1024 && " Recording may become unstable"}
-              {recordingSize > 500 * 1024 * 1024 && recordingSize <= 1024 * 1024 * 1024 && " Large file size"}
-            </div>
-          </>
-        )}
-
-        {/* Previews */}
-        <div className="preview-controls" style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-          {saveMessage && (
-            <div className="save-toast" style={{
-              background: darkMode ? '#222' : '#f0f0f0',
-              color: darkMode ? '#fff' : '#000',
-              padding: '10px 22px',
-              borderRadius: '8px',
-              margin: '12px 0',
-              boxShadow: '0 2px 12px #0007',
-              fontWeight: 500,
-              zIndex: 1000,
-            }}>
-              {saveMessage}
-              <button
-                style={{
-                  marginLeft: 18,
-                  background: 'transparent',
-                  color: darkMode ? '#fff' : '#000',
-                  border: 'none',
-                  fontSize: '1.2em',
-                  cursor: 'pointer'
-                }}
-                onClick={() => setSaveMessage(null)}
-                aria-label="Close"
-              >×</button>
-            </div>
-          )}
-          {recordOptions.screenIds.map(screenId => {
-            if (!videoUrls[screenId]) return null;
-            const screenLabel = screenDevices.find(device => device.deviceId === screenId)?.label || `Screen ${getScreenSlotNumber(screenId)}`;
-
-            return (
-              <div key={screenId} style={{marginBottom: '20px', textAlign: 'center'}}>
-                <VideoPreview src={videoUrls[screenId]} title={`${screenLabel} Video`} />
-                <div className="save-button-container">
-                  <button
-                    className="neon-save"
-                    onClick={() => handleDownload(
-                      chunks.current[screenId] || [],
-                      generateScreenFilename(screenId, videoResolution),
-                      screenId
-                    )}
-                  >
-                    {savedStatus[screenId] ? 'Saved' : 'Save'}
-                  </button>
-                  {isShareSupported() && (
-                    <button
-                      className="neon-save"
-                      onClick={() => {
-                        const chunksArr = chunks.current[screenId] || [];
-                        if (!chunksArr.length) return;
-                        const blob = new Blob(chunksArr, { type: 'video/webm' });
-                        const fileName = generateScreenFilename(screenId, videoResolution);
-                        if (navigator.share && blob) {
-                          const file = new File([blob], fileName, { type: blob.type });
-                          navigator.share({
-                            title: `${screenLabel} Recording`,
-                            text: 'Check out this recording!',
-                            files: [file],
-                          }).catch(err => console.log('Share failed:', err));
-                        }
-                      }}
-                    >
-                      Share
-                    </button>
-                  )}
-                  <span className="file-size">
-                    {formatSize(chunks.current[screenId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-          {recordOptions.cameraIds.map(camId => {
-            const device = cameraDevices.find(d => d.deviceId === camId);
-            if (!device || !videoUrls['camera_' + camId]) return null;
-            
-            return (
-              <div key={camId} style={{marginBottom: '20px', textAlign: 'center'}}>
-                <VideoPreview 
-                  src={videoUrls['camera_' + camId]} 
-                  title={`${device.label || 'Camera'}`}
-                />
-                <div className="save-button-container">
-                  <button
-                    className="neon-save"
-                    onClick={() => handleDownload(
-                      chunks.current['camera_' + camId] || [], 
-                      generateFilename("cam", cameraResolutions[camId]), 
-                      'camera_' + camId
-                    )}
-                  >
-                    {savedStatus['camera_' + camId] ? 'Saved' : 'Save'}
-                  </button>
-                  {isShareSupported() && (
-                    <button
-                      className="neon-save"
-                      onClick={() => {
-                        const chunksArr = chunks.current['camera_' + camId] || [];
-                        if (!chunksArr.length) return;
-                        const blob = new Blob(chunksArr, { type: 'video/webm' });
-                        const fileName = generateFilename("cam", cameraResolutions[camId]);
-                        if (navigator.share && blob) {
-                          const file = new File([blob], fileName, { type: blob.type });
-                          navigator.share({
-                            title: 'Camera Recording',
-                            text: 'Check out this recording!',
-                            files: [file],
-                          }).catch(err => console.log('Share failed:', err));
-                        }
-                      }}
-                    >
-                      Share
-                    </button>
-                  )}
-                  <span className="file-size">
-                    {formatSize(chunks.current['camera_' + camId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-          {recordOptions.micIds.map(micId => {
-            const device = micDevices.find(d => d.deviceId === micId);
-            const micLabel = device?.label || (isGenericMicId(micId) ? 'Phone microphone' : `Mic ${micId.slice(-4)}`);
-            if (!audioUrls['mic_' + micId]) return null;
-            
-            return (
-              <div key={micId} style={{marginBottom: '20px', textAlign: 'center'}}>
-                <h3>{micLabel}</h3>
-                <audio
-                  src={audioUrls['mic_' + micId] || undefined}
-                  controls
-                />
-                <div className="save-button-container">
-                  <button
-                    className="neon-save"
-                    onClick={() => handleDownload(
-                      chunks.current['mic_' + micId] || [], 
-                      generateFilename("mic", audioQuality), 
-                      'mic_' + micId,
-                      'audio/webm'
-                    )}
-                  >
-                    {savedStatus['mic_' + micId] ? 'Saved' : 'Save'}
-                  </button>
-                  {isShareSupported() && (
-                    <button
-                      className="neon-save"
-                      onClick={() => {
-                        const chunksArr = chunks.current['mic_' + micId] || [];
-                        if (!chunksArr.length) return;
-                        const blob = new Blob(chunksArr, { type: 'audio/webm' });
-                        const fileName = generateFilename("mic", audioQuality);
-                        if (navigator.share && blob) {
-                          const file = new File([blob], fileName, { type: blob.type });
-                          navigator.share({
-                            title: 'Audio Recording',
-                            text: 'Check out this recording!',
-                            files: [file],
-                          }).catch(err => console.log('Share failed:', err));
-                        }
-                      }}
-                    >
-                      Share
-                    </button>
-                  )}
-                  <span className="file-size">
-                    {formatSize(chunks.current['mic_' + micId]?.reduce((acc, chunk) => acc + chunk.size, 0) || 0)}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-          </div>
-        
-        {/* Clear All button */}
-        {(recordedChunks.length > 0 || Object.values(videoUrls).some(Boolean) || Object.values(audioUrls).some(Boolean)) && (
-          <>
-            <button
-              className="clear-button"
-              onClick={handleClearAll}
-            >
-              Clear All
+            <button className="btn" onClick={startRecording} disabled={recording || deviceBusy}>Start Recording</button>
+            <button className={recording ? 'neon-stop' : 'btn-disabled'} onClick={stopRecording} disabled={!recording || sessionState === 'stopping'}>
+              {sessionState === 'acquiring' ? 'Cancel capture' : 'Stop Recording'}
             </button>
-            {showClearConfirmation && (
-              <div className="modal confirmation-modal-center">
-                <div className="modal-content" ref={clearConfirmationRef}>
-                  <p>Are you sure you want to delete current recordings?</p>
-                  <div className="popup-buttons">
-                    <button className="popup-button confirm" onClick={confirmClear}>Yes</button>
-                    <button className="popup-button cancel" onClick={cancelClear}>No</button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+          </div>
+          <div role="status" aria-live="polite">
+            {deviceBusy && <p>Checking selected devices… Finish or dismiss any browser permission prompt to continue.</p>}
+            {sessionState === 'acquiring' && <p>Choose your sources in the browser prompts. Recording starts after all sources are ready.</p>}
+            {sessionState === 'stopping' && <p>Finishing capture… If a permission prompt is open, close it to continue.</p>}
+            {sessionState === 'recording' && <p>Recording in progress</p>}
+          </div>
+          {sessionState === 'recording' && <>
+            <div className="recording-timer">Recording: {formatTime(recordingTime)}</div>
+            <div className={`recording-size${recordingSize > 1024 ** 3 ? ' danger' : recordingSize > 500 * 1024 ** 2 ? ' warning' : ''}`}>
+              {formatSize(recordingSize)}
+              {recordingSize > 500 * 1024 ** 2 && ' — Large recording. Stop and save soon to reduce memory pressure.'}
+            </div>
+          </>}
+          {saveMessage && <p role="status" className="save-feedback">{saveMessage}</p>}
+          <RecordingList recordings={recordings} notify={setSaveMessage} />
+          {recordings.length > 0 && <button className="clear-button" disabled={recording || deviceBusy} onClick={() => setShowClearConfirmation(true)}>Clear All</button>}
+          {showClearConfirmation && <Modal title="Clear recordings?" onDismiss={() => setShowClearConfirmation(false)}>
+            <p>This deletes all recordings in this tab. Check that any files you need have finished downloading first.</p>
+            <div className="popup-buttons">
+              <button className="popup-button confirm" onClick={confirmClear}>Yes</button>
+              <button className="popup-button cancel" onClick={() => setShowClearConfirmation(false)}>No</button>
+            </div>
+          </Modal>}
+          {screenPrompt && <Modal title={`Choose ${screenPrompt.label}`} onDismiss={screenPrompt.cancel}>
+            <p>Your earlier sources are ready. Choose the next screen to continue.</p>
+            <button className="btn" onClick={screenPrompt.choose}>Choose {screenPrompt.label}</button>
+            <button className="footer-button footer-link" onClick={screenPrompt.cancel}>Cancel capture</button>
+          </Modal>}
+          {permissionError && <Modal title="Recording notice" onDismiss={() => setPermissionError(null)}>
+            <p style={{ whiteSpace: 'pre-line' }}>{permissionError}</p>
+            <button className="btn" onClick={() => setPermissionError(null)}>OK</button>
+          </Modal>}
         </div>
 
         <footer className="app-footer">
           <div className="copyright">
-            © 2026{' '}
+            <span className="release-version">v{__APP_VERSION__} · </span>© 2026{' '}
             <a
               href="https://www.sadilekinnovation.com"
               target="_blank"
@@ -2422,36 +1788,14 @@ function App() {
         </footer>
       </main>
 
-      {activeLegalDocument && (
-        <div className="legal-modal-backdrop" role="presentation" onClick={() => setLegalModal(null)}>
-          <section
-            className="legal-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="legal-modal-title"
-            onClick={event => event.stopPropagation()}
-          >
-            <div className="legal-modal-header">
-              <div>
-                <span className="legal-eyebrow">Legal</span>
-                <h2 id="legal-modal-title">{activeLegalDocument.title}</h2>
-                <p>Last updated: {activeLegalDocument.updated}</p>
-              </div>
-              <button className="legal-close" onClick={() => setLegalModal(null)} aria-label="Close legal document">
-                <span aria-hidden="true">&times;</span>
-              </button>
-            </div>
-            <div className="legal-content">
-              {activeLegalDocument.sections.map(section => (
-                <section key={section.heading}>
-                  <h3>{section.heading}</h3>
-                  <p>{section.body}</p>
-                </section>
-              ))}
-            </div>
-          </section>
+      {activeLegalDocument && <Modal title={activeLegalDocument.title} onDismiss={() => setLegalModal(null)}>
+        <p>Last updated: {activeLegalDocument.updated}</p>
+        <div className="legal-content">
+          {activeLegalDocument.sections.map(section => <section key={section.heading}>
+            <h3>{section.heading}</h3><p>{section.body}</p>
+          </section>)}
         </div>
-      )}
+      </Modal>}
     </div>
   );
 }
