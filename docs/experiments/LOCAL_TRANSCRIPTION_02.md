@@ -34,7 +34,7 @@ The original 12.701-second generated English reference was replayed through a re
 - Tiny model assets reported 42,985,755 bytes, excluding runtime/WASM and HTTP overhead. Word timing and overlap increase total work compared with the earlier baseline.
 - Unit checks cover exact retained PCM overlap, bounded windows, final flushing, revising omitted/incorrect endings, repetitions, separate utterances, and flagged uncertain/empty joins. The real-model browser fixture now compares its final text to the reference rather than merely checking that text appeared.
 
-Raw generated-audio test evidence is local under `output/transcription-benchmark/overlap-*`, not committed. This does not establish physical iPhone performance or human-speech accuracy.
+Raw generated-audio test evidence is local under `output/transcription-benchmark/overlap-*`, not committed. These automated measurements do not quantify physical iPhone performance or human-speech accuracy; the first user phone result is recorded below.
 
 ## iPhone delivery and test
 
@@ -46,4 +46,8 @@ On Safari, use Tiny and CPU/WASM, load the model, then speak continuously for 25
 
 Public verification passed: all 12 package files matched their build hashes, JS/CSS had the expected MIME types, HTTPS and the HTTP-to-HTTPS redirect worked, and the worker loaded Tiny successfully. The public AudioWorklet registered without microphone access. After model loading, completed-file inference succeeded with browser networking disabled (2.112 s for the 12.701-second reference). This verifies inference in an already-loaded page, not offline startup.
 
-Production `/version.json` stayed at v0.2.0/revision `3f7e97fbd6f1e6f474c44a8a509d15c339298ee7`, and the production root HTML hash was identical before/after preview publication. Hosted source/container checks passed. Physical Safari success remains for the user's phone test.
+Production `/version.json` stayed at v0.2.0/revision `3f7e97fbd6f1e6f474c44a8a509d15c339298ee7`, and the production root HTML hash was identical before/after preview publication. Hosted source/container checks passed.
+
+### First user iPhone result
+
+On October 21, 2026, in response to the Safari/iPhone test request for Preview 2, the user reported: “worked really nicely. perfect transcription.” Record this as a successful user test of live English transcription. No timing report or reference audio was supplied, and audio playback was not separately confirmed in the reply. Longer sessions, noisy speech, interruptions/backgrounding, and video-concurrent capture remain further checks.
