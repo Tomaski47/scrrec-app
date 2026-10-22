@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Segmenter, SAMPLE_RATE } from '../src/experiments/transcription/audio.ts';
+import { Segmenter, SAMPLE_RATE, OVERLAP_SECONDS, WINDOW_SECONDS } from '../src/experiments/transcription/audio.ts';
 import { reconcile } from '../src/experiments/transcription/reconcile.ts';
 import type { Segment, Word } from '../src/experiments/transcription/protocol.ts';
 
-const segment = (start = 0, end = 8, final = false): Segment => ({ id: start ? 2 : 1, utterance: 1, start, end, overlap: start ? 3 : 0, final, wordTimings: true, audio: new Float32Array(0) });
+const segment = (start = 0, end = 8, final = false): Segment => ({ id: start ? 2 : 1, utterance: 1, start, end, overlap: start ? 3 : 0, final, audio: new Float32Array(0) });
 const words = (text: string, start: number, step = 0.3): Word[] => text.split(' ').map((text, i) => ({ text: ` ${text}`, start: start + i * step, end: start + (i + 1) * step }));
 
 test('overlap recovers an omitted ending and replaces a misrecognized trailing word', () => {
@@ -39,15 +39,15 @@ test('uncertain/empty overlap is flagged; a separate utterance is never deduplic
 
 test('continuous speech keeps exact PCM overlap, bounded windows, and a final tail on Stop', () => {
   const output: Segment[] = [];
-  const source = Float32Array.from({ length: SAMPLE_RATE * 17 }, (_, i) => 0.1 + i / 1e7);
+  const source = Float32Array.from({ length: SAMPLE_RATE * 25 }, (_, i) => 0.1 + i / 1e7);
   const segmenter = new Segmenter(item => output.push(item));
   for (let offset = 0; offset < source.length; offset += 2048) segmenter.push(source.subarray(offset, offset + 2048));
   segmenter.flush();
   assert.equal(output.length, 3); assert.equal(output[0].final, false); assert.equal(output[2].final, true);
   for (let i = 1; i < output.length; i++) {
-    assert.ok(Math.abs(output[i - 1].end - output[i].start - 3) < 1e-6);
-    assert.deepEqual(output[i].audio.subarray(0, SAMPLE_RATE * 3), output[i - 1].audio.slice(-SAMPLE_RATE * 3));
+    assert.ok(Math.abs(output[i - 1].end - output[i].start - OVERLAP_SECONDS) < 1e-6);
+    assert.deepEqual(output[i].audio.subarray(0, SAMPLE_RATE * OVERLAP_SECONDS), output[i - 1].audio.slice(-SAMPLE_RATE * OVERLAP_SECONDS));
     assert.equal(output[i].utterance, 1);
-    assert.ok(output[i].audio.length <= SAMPLE_RATE * 8 + 320);
+    assert.ok(output[i].audio.length <= SAMPLE_RATE * WINDOW_SECONDS + 320);
   }
 });

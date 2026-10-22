@@ -7,7 +7,26 @@ async (page) => {
   await page.evaluate(async () => {
     const bytes = await document.querySelector('#file').files[0].arrayBuffer();
     const quiet = window.enduranceQuiet === true;
-    const state = window.endurance = { runName: quiet ? 'quiet' : 'noise', started: false, calls: 0, frames: 0, repetitions: 9, snrDB: quiet ? null : 18, samples: [], videoChunks: [], videoBytes: 0, forcedStop: false, done: false, error: null };
+    const runName = window.enduranceLabel || (quiet ? 'quiet' : 'noise');
+    if (!/^[a-z0-9-]+$/.test(runName)) throw new Error('Use a simple unique evidence label.');
+    const state = window.endurance = { runName, started: false, calls: 0, frames: 0, repetitions: 9, snrDB: quiet ? null : 18, samples: [], videoChunks: [], videoBytes: 0, forcedStop: false, done: false, error: null };
+    // Optional generated-PCM evidence allows exact inference replay without
+    // another two-minute capture. Never enable this on a physical recording.
+    const post = Worker.prototype.postMessage;
+    if (window.enduranceTrace === true) {
+      state.inputs = []; state.results = [];
+      Worker.prototype.postMessage = function(message, ...rest) {
+        if (message.type === 'transcribe') {
+          state.inputs.push({ id: message.id, audio: message.audio.slice() });
+          if (!state.worker) {
+            state.worker = this;
+            state.listener = ({ data }) => { if (data.type === 'result' || data.type === 'error') state.results.push(data); };
+            this.addEventListener('message', state.listener);
+          }
+        }
+        return post.call(this, message, ...rest);
+      };
+    }
     navigator.mediaDevices.getUserMedia = async () => {
       if (++state.calls !== 1) throw new Error('Unexpected second microphone acquisition');
       const context = state.context = new AudioContext(); await context.resume();
@@ -61,6 +80,10 @@ async (page) => {
         }
         if (state.videoBlob && /finished|incomplete/.test(document.querySelector('#transcript-state').textContent)) {
           state.done = true; state.completedAt = elapsed; clearInterval(state.monitor); clearTimeout(state.deadline);
+          if (state.inputs) {
+            Worker.prototype.postMessage = post;
+            state.worker?.removeEventListener('message', state.listener);
+          }
         }
       }, 100);
       state.deadline = setTimeout(() => {

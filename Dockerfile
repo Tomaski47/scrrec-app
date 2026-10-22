@@ -2,6 +2,8 @@
 FROM node:24-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
+# Browser-only inference does not use the optional native GPU downloads.
+ENV ONNXRUNTIME_NODE_INSTALL=skip
 RUN npm ci --no-fund
 COPY . /app
 ARG BUILD_REVISION=unknown

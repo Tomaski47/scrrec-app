@@ -22,17 +22,17 @@ async (page) => {
   await page.waitForFunction(() => /finished|incomplete/.test(document.querySelector('#transcript-state').textContent), null, { timeout: 45_000 });
   const live = JSON.parse(await page.locator('#metrics').textContent());
   if (!live.segments.length || live.incomplete || live.maxQueue > 3) throw new Error(`Live transcription failed: ${await page.locator('#status').innerText()}`);
-  const canonical = text => text.toLowerCase().replace(/\b9[.:]30\b/g, 'nine thirty').replace(/\b12\b/g, 'twelve').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  const canonical = text => text.toLowerCase().replace(/\b9[.:]?30\b/g, 'nine thirty').replace(/\b12\b/g, 'twelve').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
   const expected = 'Today we are testing local transcription in the screen recorder. The meeting starts at nine thirty on Friday. Please save twelve recordings and send the notes to Thomas. Our next step is to compare the tiny model with the base model.';
   const recognized = live.segments.map(item => item.text).join(' ');
   if (canonical(recognized) !== canonical(expected)) throw new Error(`Reference words changed at a boundary: ${recognized}`);
-  if (live.segments.some(item => !item.final || item.boundaryReview)) throw new Error('Transcript retained a draft or uncertain boundary after Stop.');
+  if (live.segments.some(item => !item.final || item.boundaryReview || item.recognitionReview)) throw new Error('Transcript retained a draft or review flag after Stop.');
   if (!live.windows.some(item => item.overlap > 0)) throw new Error('The test did not exercise overlapping inference.');
   const fixture = await page.evaluate(() => ({ requests: window.transcriptionFixture.requests, ended: window.transcriptionFixture.streams.every(s => s.getTracks().every(t => t.readyState === 'ended')) }));
   if (fixture.requests !== 1 || !fixture.ended) throw new Error('Transcription opened another microphone or leaked media tracks.');
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download transcript + measurements' }).click();
-  await (await pending).saveAs('output/transcription-benchmark/tiny-live.json');
+  await (await pending).saveAs(`output/transcription-benchmark/tiny-live-${live.preview}-${/Firefox/.test(live.userAgent) ? 'firefox' : 'chromium'}.json`);
   // Cancel the model during a second recording: MediaRecorder must keep running.
   await page.getByRole('button', { name: 'Record + transcribe' }).click();
   await page.waitForTimeout(800);

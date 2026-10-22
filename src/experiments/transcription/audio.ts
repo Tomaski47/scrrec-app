@@ -1,6 +1,7 @@
 import type { Segment } from './protocol.ts';
 export const SAMPLE_RATE = 16_000;
-export const OVERLAP_SECONDS = 3;
+export const WINDOW_SECONDS = 12;
+export const OVERLAP_SECONDS = 4;
 
 /** Stateful linear resampling: preserves the fractional position across blocks. */
 export class Resampler {
@@ -58,7 +59,7 @@ export class Segmenter {
         this.preRoll = this.preRoll.slice(-SAMPLE_RATE * 0.2);
       }
       if (this.silent >= SAMPLE_RATE * 0.7) this.flush();
-      else if (this.samples.length >= SAMPLE_RATE * 8) {
+      else if (this.samples.length >= SAMPLE_RATE * WINDOW_SECONDS) {
         this.emitWindow(false);
         this.samples = this.samples.slice(-SAMPLE_RATE * OVERLAP_SECONDS);
         this.start = this.clock - this.samples.length;
@@ -75,7 +76,7 @@ export class Segmenter {
   }
   private emitWindow(final: boolean) {
     this.emit({ id: ++this.sequence, utterance: this.utterance, overlap: this.overlap,
-      final, wordTimings: true, start: this.start / SAMPLE_RATE,
+      final, start: this.start / SAMPLE_RATE,
       end: (this.start + this.samples.length) / SAMPLE_RATE, audio: Float32Array.from(this.samples) });
   }
 }

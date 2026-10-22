@@ -6,6 +6,7 @@ import { isAppleMobile } from '../../recorder/cameras';
 import { reconcile } from './reconcile';
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+element<HTMLAnchorElement>('notices').href = `${import.meta.env.BASE_URL}licenses/README.txt`;
 const button = (id: string) => element<HTMLButtonElement>(id);
 const status = (text: string) => { element('status').textContent = text; };
 let worker: Worker | undefined;
@@ -15,7 +16,7 @@ let queue: BoundedQueue | undefined;
 let timeout: ReturnType<typeof setTimeout> | undefined;
 let captureLimit: ReturnType<typeof setTimeout> | undefined;
 let transcript: Transcript[] = [];
-let windows: { id: number; start: number; end: number; overlap: number; final: boolean; text: string; inferenceMs: number }[] = [];
+let windows: { id: number; start: number; end: number; overlap: number; final: boolean; text: string; inferenceMs: number; retried: boolean; review: boolean }[] = [];
 let maxQueue = 0;
 let source = '';
 let loadMs = 0;
@@ -36,7 +37,7 @@ function controls() {
   element<HTMLSelectElement>('microphone').disabled = capturing;
   element<HTMLInputElement>('file').disabled = capturing || busy;
   element('transcript-state').textContent = incomplete ? '· incomplete' : queue?.depth ? '· processing' : capturing ? '· listening' : transcript.length ? '· finished' : '';
-  element('metrics').textContent = JSON.stringify({ preview: 'iphone-2', revision: import.meta.env.VITE_BUILD_REVISION, userAgent: navigator.userAgent, secureContext: isSecureContext, model: MODELS[model], runtime: 'transformers.js 3.8.1', device, dtype: 'q8', source, contextRate, loadMs, maxQueue,
+  element('metrics').textContent = JSON.stringify({ preview: 'iphone-3', revision: import.meta.env.VITE_BUILD_REVISION, userAgent: navigator.userAgent, secureContext: isSecureContext, model: MODELS[model], runtime: 'transformers.js 4.3.0', device, dtype: 'q8', source, contextRate, loadMs, maxQueue,
     modelFiles: Object.fromEntries(files), reportedModelBytes: [...files.values()].reduce((sum, file) => sum + file.total, 0),
     windows: windows.map(w => ({ ...w, realTimeFactor: w.inferenceMs / ((w.end - w.start) * 1000) })),
     segments: transcript, incomplete }, null, 2);
@@ -59,7 +60,7 @@ function newTranscript(label: string) {
     if (!worker || !ready) return;
     clearTimeout(timeout);
     timeout = setTimeout(() => fail('The speech model took too long.'), 90_000);
-    worker.postMessage({ type: 'transcribe', id: segment.id, audio: segment.audio, wordTimings: segment.wordTimings }, [segment.audio.buffer]);
+    worker.postMessage({ type: 'transcribe', id: segment.id, audio: segment.audio, overlap: segment.overlap }, [segment.audio.buffer]);
   }, () => {
     incomplete = true;
     status('Transcription fell behind and has paused. Recording continues. Save the audio to retry later.');
@@ -92,12 +93,13 @@ button('load').onclick = () => {
       if (segment) {
         const previous = transcript.find(item => item.id === segment.utterance);
         const item = reconcile(previous, segment, message.text, message.words, message.ms);
+        item.recognitionReview = previous?.recognitionReview || message.review;
         if (previous) transcript[transcript.indexOf(previous)] = item;
         else transcript.push(item);
-        windows.push({ id: segment.id, start: segment.start, end: segment.end, overlap: segment.overlap, final: segment.final, text: message.text, inferenceMs: message.ms });
+        windows.push({ id: segment.id, start: segment.start, end: segment.end, overlap: segment.overlap, final: segment.final, text: message.text, inferenceMs: message.ms, retried: message.retried, review: message.review });
         element('transcript').replaceChildren(...transcript.map(item => {
           const row = document.createElement('li');
-          row.textContent = `${item.start.toFixed(1)}–${item.end.toFixed(1)}s${item.final ? '' : ' · draft ending'}${item.boundaryReview ? ' · check join' : ''} · ${item.text || '[No text detected]'}`;
+          row.textContent = `${item.start.toFixed(1)}–${item.end.toFixed(1)}s${item.final ? '' : ' · draft ending'}${item.boundaryReview ? ' · check join' : ''}${item.recognitionReview ? ' · check recognition' : ''} · ${item.text || '[No text detected]'}`;
           return row;
         }));
       }
@@ -214,7 +216,7 @@ button('transcribe').onclick = async () => {
     const rendered = await offline.startRendering();
     if (current !== generation) return;
     newTranscript(file.name);
-    queue!.add({ id: 1, utterance: 1, overlap: 0, final: true, wordTimings: false, start: 0, end: decoded.duration, audio: rendered.getChannelData(0).slice() });
+    queue!.add({ id: 1, utterance: 1, overlap: 0, final: true, start: 0, end: decoded.duration, audio: rendered.getChannelData(0).slice() });
     maxQueue = 1; status('Transcribing selected file locally…');
   } catch (error) { if (current === generation) status(String(error)); }
   finally { await context.close(); if (current === generation) { decoding = false; controls(); } }

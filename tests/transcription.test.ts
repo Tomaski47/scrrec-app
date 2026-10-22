@@ -28,7 +28,7 @@ test('speech timestamps include silence and Stop flushes a short final phrase', 
 test('transcription overload stops accepting PCM jobs, drains retained jobs and never stops media', () => {
   const sent: number[] = []; let overflow = 0;
   const queue = new BoundedQueue(segment => sent.push(segment.id), () => { overflow++; });
-  for (let id = 1; id <= 10; id++) queue.add({ id, utterance: 1, overlap: 0, final: true, wordTimings: true, start: id, end: id + 1, audio: new Float32Array(16_000) });
+  for (let id = 1; id <= 10; id++) queue.add({ id, utterance: 1, overlap: 0, final: true, start: id, end: id + 1, audio: new Float32Array(16_000) });
   assert.equal(queue.depth, 3); assert.equal(overflow, 1); assert.equal(queue.accepting, false);
   assert.equal(queue.complete(999), undefined);
   for (let id = 1; id <= 3; id++) assert.equal(queue.complete(id)?.id, id);
