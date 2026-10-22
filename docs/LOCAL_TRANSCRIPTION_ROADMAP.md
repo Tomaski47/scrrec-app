@@ -6,7 +6,7 @@ Updated: October 21, 2026. Status: v0.2.0 reliability release shipped. An isolat
 
 Let a user record and build a transcript locally in the same session. The transcript should also be recoverable by processing a completed recording. Later, finalized text can drive meeting notes, suggested questions, action items, or prompts during a livestream. Release the reliability candidate first, then validate this direction with a small experiment.
 
-The user confirmed English first. [Preview 2](experiments/LOCAL_TRANSCRIPTION_02.md) adds overlapping windows and word-timed reconciliation; the first pass's missing-word regression now passes with real Tiny/WASM inference. The first user iPhone test also passed, with the user reporting perfect transcription. Next gates are longer phone sessions and interruptions, broader human speech/noise comparisons, Base/Moonshine, and concurrency with camera/screen capture. Model caching alone did not permit an offline worker restart; runtime/app caching remains a separate delivery requirement.
+The user confirmed English first. [Preview 2](experiments/LOCAL_TRANSCRIPTION_02.md) adds overlapping windows and word-timed reconciliation; the first pass's missing-word regression now passes with real Tiny/WASM inference. The user reported perfect playback and transcription in a 40-second iPhone test. Two-minute automated quiet/noisy runs preserved recordings and bounded queue depth during concurrent generated video encoding, but revealed substantial transcript omissions. A direct replay comparison points to the older runtime's generation behavior; the companion app's newer runtime recovered subsequent speech in three problem ranges. The next task is a reproducibly bundled runtime comparison and full-session accuracy regression before production integration. Broader human speech/noise comparisons, Base/Moonshine, actual camera/screen integration, and phone interruptions remain gates. Further manual phone tests are deferred at the user's request. Model caching alone did not permit an offline worker restart; runtime/app caching remains a separate delivery requirement.
 
 Live text is the intended direction. A recorded-audio transcription feature is an early useful outcome and a fallback for devices that cannot transcribe fast enough while capturing video. Build both around the same transcript representation, so adding live assistance does not require replacing the first feature.
 
@@ -59,7 +59,7 @@ Effort below is a rough engineering estimate, not a delivery commitment. Browser
 
 Build the live path in phase 1 rather than waiting until all recorded-audio UI is complete. If it clears the resource/accuracy gates early, a limited live beta can accompany phase 2. A strong microphone-only livestream/narration use case can ship before full meeting coverage.
 
-The next implementation task should be the capped phase-1 experiment after the reliability release. Produce a small benchmark note and choose the model/runtime/default languages before committing to the larger UI.
+Phase 1 is underway. Resolve the extended-session omissions and runtime delivery first, then compare models and choose a default before building the production transcript panel. Recording stability and recognition accuracy are separate acceptance gates.
 
 ## Validation and resource budget
 

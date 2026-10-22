@@ -50,4 +50,27 @@ Production `/version.json` stayed at v0.2.0/revision `3f7e97fbd6f1e6f474c44a8a50
 
 ### First user iPhone result
 
-On October 21, 2026, in response to the Safari/iPhone test request for Preview 2, the user reported: “worked really nicely. perfect transcription.” Record this as a successful user test of live English transcription. No timing report or reference audio was supplied, and audio playback was not separately confirmed in the reply. Longer sessions, noisy speech, interruptions/backgrounding, and video-concurrent capture remain further checks.
+On October 21, 2026, in response to the Safari/iPhone test request for Preview 2, the user reported: “worked really nicely. perfect transcription.” The user then clarified that it was a 40-second test and that both playback and transcription sounded perfect. Record this as a successful user test of live English transcription and audio playback. No instrumented timing report or reference audio was supplied.
+
+The user does not want additional manual tests in this round. Continue the checks that can be automated locally; device-specific interruptions/backgrounding remain unverified without blocking this experiment on more user testing.
+
+### Automated two-minute checks
+
+The extended CLI fixture replays nine copies of the generated reference (369 normalized reference words), then leaves a short tail before the app's two-minute automatic stop. A separate native 640×360/15 fps VP8+Opus encoder records moving generated video with the same audio track. This checks concurrent encoding load; it is not an integrated camera/screen transcript-panel test or a physical iPhone endurance test.
+
+Both the quiet control and steady synthetic white noise at a target 18 dB signal-to-noise ratio (injected after capture processing) completed without capture/encoder failure:
+
+| Condition | Automatic stop | ASR windows | Maximum queue | Normalized word errors |
+|---|---|---|---|---|
+| Quiet | 120.10 s | 23 | 1 | 78 / 369 (21.14%) |
+| 18 dB noise | 120.10 s | 24 | 2 | 112 / 369 (30.35%) |
+
+All owned tracks ended. Both audio/video recordings decoded through their full duration; each video contained 1,801 decoded frames. The noisy run finished ASR at 121.70 s. Observed main-thread JS heap peaked around 34 MB in both runs; this excludes worker, WASM, encoder and media memory and does not establish a total memory bound.
+
+Recognition quality failed in both conditions, including omissions and invented text. Word error rate uses Levenshtein distance against the nine reference copies, normalizing punctuation and number forms (`9.30`, `9:30`, `930`, `12`); it is a regression measurement on generated speech, not a representative accuracy estimate. Each run flagged one join. The fixed energy gate also treated the noise-only tail as speech, and the model returned a non-speech annotation. A completed queue and a “finished” transcript do not establish complete or accurate recognition.
+
+Raw inference results already omit speech before reconciliation. For example, an approximately eight-second quiet window beginning at 25.14 s returned only “model.” The saved encoded audio was decoded locally and three problem ranges were replayed directly through the same pinned Tiny/q8 model with Transformers.js 3.8.1 and the companion app's installed 4.3.0 browser runtime. The older runtime again stopped after short fragments; the newer runtime recognized subsequent sentences in all three ranges. Removing the explicit 128-token limit alone did not fix 3.8.1. This narrows the investigation to generation/runtime behavior rather than queue overload, but the comparison is diagnostic: encoded replay differs from original PCM, and no full-session accuracy or iPhone validation of 4.3.0 has been completed.
+
+Next: reproducibly bundle/pin the newer browser runtime and its WASM assets, replay the complete reference through word-timed reconciliation, then rerun concurrent capture and noise checks. Keep this as a draft experiment until it passes. The published Preview 2 remains unchanged; retain the successful 40-second user result without generalizing it to longer sessions. Device interruptions/backgrounding remain unverified and are deferred; the user is not being asked for more manual checks this round.
+
+The repeatable fixtures are `scripts/browser-transcription-endurance.js` and `scripts/browser-transcription-endurance-result.js`. They require localhost, the loaded real model, and the generated reference WAV. Set `window.enduranceQuiet = true` before starting for the quiet control. Generated media and reports are retained locally under `output/transcription-benchmark/endurance-*`; none are committed or uploaded.
