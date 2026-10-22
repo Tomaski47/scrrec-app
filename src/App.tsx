@@ -211,7 +211,7 @@ const stackDetails = [
   'Web Audio API GainNode and AnalyserNode support microphone gain and peak-level metering.',
   'Native Blob, download and Web Share APIs handle local export with the actual recording format.',
   'Docker and nginx are included for static deployment hosting.',
-  'Tailwind/PostCSS tooling exists in the project, while the 2026 refresh and functional controls are primarily custom CSS.',
+  'Custom CSS provides the interface, with PostCSS and Autoprefixer for browser compatibility.',
   'Vite serves localhost on port 5174. Phone testing requires a separately configured secure HTTPS connection.',
 ];
 
@@ -1031,8 +1031,12 @@ function App() {
   const startRecording = () => {
     const session = sessionRef.current;
     if (!session || session.state !== 'idle' || deviceOperationsRef.current > 0) return;
+    if (!window.isSecureContext) {
+      setPermissionError('Recording requires a secure connection. Open the HTTPS version of this page using the link below the source controls, then try again.');
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      setPermissionError('Recording is not supported here. Use a supported browser over HTTPS or localhost.');
+      setPermissionError('This browser is not exposing the APIs needed for recording. Open this page directly in an up-to-date Safari, Chrome, or Firefox browser. Browsers inside other apps may restrict recording.');
       return;
     }
     const micIds = recordOptions.mic ? recordOptions.micIds.filter(id => !isMicUnlockId(id)) : [];
@@ -1718,6 +1722,7 @@ function App() {
 
           <p className="capture-note">Screen and camera save as separate videos with your selected microphone audio. Tab/system audio is not captured.</p>
           <div className="action-buttons">
+            {!window.isSecureContext && window.location.protocol === 'http:' && <p role="alert">Recording requires HTTPS. <a href={window.location.href.replace(/^http:/, 'https:')}>Open the secure page</a>.</p>}
             <button className="btn" onClick={startRecording} disabled={recording || deviceBusy}>Start Recording</button>
             <button className={recording ? 'neon-stop' : 'btn-disabled'} onClick={stopRecording} disabled={!recording || sessionState === 'stopping'}>
               {sessionState === 'acquiring' ? 'Cancel capture' : 'Stop Recording'}

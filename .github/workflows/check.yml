@@ -37,5 +37,8 @@ jobs:
           curl --fail --silent -D /tmp/headers http://localhost:8080/favicon.svg -o /dev/null
           grep -qi 'x-content-type-options: nosniff' /tmp/headers
           test "$(curl --silent -o /dev/null -w '%{http_code}' http://localhost:8080/missing.js)" = 404
+          curl --silent -D /tmp/redirect http://localhost:8080/og -o /dev/null
+          grep -qi 'location: /og/' /tmp/redirect
+          test "$(curl --silent -H 'CF-Visitor: {"scheme":"http"}' -o /dev/null -w '%{http_code}' http://localhost:8080/)" = 308
       - if: always()
         run: docker rm -f screen-recorder-check || true

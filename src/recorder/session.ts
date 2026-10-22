@@ -68,9 +68,13 @@ interface Run {
 
 export function recorderOptions(hasVideo: boolean, hasAudio: boolean, quality: AudioQuality, supports: Platform['supports']): MediaRecorderOptions {
   const candidates = hasVideo
-    ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+    ? hasAudio
+      ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+      : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']
     : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/aac'];
   const mimeType = candidates.find(supports);
+  // Firefox can advertise a video+Opus format for a video-only stream, then
+  // stall finalization waiting for the missing audio track. Match actual tracks.
   // If none of our preferred containers is advertised, let the browser choose.
   return {
     ...(mimeType ? { mimeType } : {}),

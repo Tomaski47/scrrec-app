@@ -224,3 +224,14 @@ test('format follows actual recorder MIME, and audio presets match the UI', asyn
     assert.equal(recorderOptions(false, true, quality, () => false).videoBitsPerSecond, undefined);
   }
 });
+
+test('video-only MIME negotiation excludes audio codecs so Firefox can finalize', () => {
+  const advertised = new Set(['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp8']);
+  const supports = (mime: string) => advertised.has(mime);
+  const videoOnly = recorderOptions(true, false, 'best', supports);
+  assert.equal(videoOnly.mimeType, 'video/webm;codecs=vp8');
+  assert.equal(videoOnly.audioBitsPerSecond, undefined);
+  const withAudio = recorderOptions(true, true, 'best', supports);
+  assert.equal(withAudio.mimeType, 'video/webm;codecs=vp8,opus');
+  assert.equal(withAudio.audioBitsPerSecond, 256_000);
+});

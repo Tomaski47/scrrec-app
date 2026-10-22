@@ -113,6 +113,7 @@ http://localhost:8080/
 
 - [Release 0.2.0](docs/RELEASE_0.2.0.md)
 - [Known Issues and Future Work](docs/KNOWN_ISSUES_AND_FUTURE_WORK.md)
+- [Local Transcription and Live Assistance Roadmap](docs/LOCAL_TRANSCRIPTION_ROADMAP.md)
 - [Open Source Release Checklist](docs/OPEN_SOURCE_RELEASE_CHECKLIST.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)

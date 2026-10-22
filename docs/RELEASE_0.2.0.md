@@ -2,6 +2,8 @@
 
 Status: release candidate, September 22, 2026. Deploy after the physical-device acceptance checks below. This change does not itself deploy production or tag a public release.
 
+October 21 release execution: Vite is updated to 6.4.5 and source-map-js to 1.2.2; unused Tailwind tooling is removed, clearing the nine newly affected development/build packages. The dependency audit again reports zero findings. CSS output is byte-for-byte unchanged. Release acceptance is in progress; see the [current roadmap](KNOWN_ISSUES_AND_FUTURE_WORK.md) and [local transcription proposal](LOCAL_TRANSCRIPTION_ROADMAP.md).
+
 ## Changes
 
 - Completed files survive new recording attempts, cancelled permission pickers, and source-selection changes. Clear All and tab lifetime control their retention.
@@ -10,15 +12,19 @@ Status: release candidate, September 22, 2026. Deploy after the physical-device 
 - Stable recording previews, honest download/share feedback, keyboard-friendly dialogs, visible focus, and reduced-motion support.
 - Node 24 LTS, updated compatible dependencies, removed unused runtime packages, strict type checking, recorder regression tests, CI checks and container smoke tests, monthly Dependabot updates.
 - Production health/version endpoints, cache behavior, and consistent security headers. CSP stays report-only until deployed assets and hosting integrations have been observed.
+- Video-only MIME choices omit audio codecs, fixing a Firefox finalization stall reproduced during acceptance. The regression is covered in the lifecycle suite and real Firefox encoder checks.
+- Relative nginx directory redirects preserve HTTPS behind a TLS-terminating proxy. Cloudflare-origin HTTP requests redirect to HTTPS, with a one-day HSTS policy. An insecure-page recording error now explains how to open the secure page. These changes fix the HTTP downgrade found during the iPhone/desktop preview check.
 
 ## Verification performed
 
-- `npm run check` on Node 24: lint, 11 lifecycle/format regression tests, both TypeScript configurations, and production build.
+- `npm run check` on Node 24: lint, 12 lifecycle/format regression tests, both TypeScript configurations, and production build.
 - `npm audit`: zero reported vulnerabilities across production and development dependencies at the time of preparation. This is a point-in-time result, not a permanent guarantee.
 - Local production Docker image builds and starts; nginx configuration validates. Health and release metadata return 200, HTML/metadata revalidate, missing JavaScript returns 404, and security headers apply to assets.
 - Chromium browser checks use synthetic canvas/oscillator input with real MediaRecorder encoding: retained outputs after failed/successful retries, locked startup, real download, MP4 extension, source termination, microphone permission scope/bitrate, multiple screens, camera plus two microphones with one mixed video audio track and separate audio files, share/capture cancellation, keyboard dialog dismissal/focus restoration, and a 390px mobile viewport.
 
 Synthetic capture does not exercise OS pickers, actual microphone/camera hardware, Safari/Firefox encoders, mobile resource limits, or long-session memory growth.
+
+October 21 additional checks: physical Mac FaceTime HD camera plus built-in microphone capture and playback passed; test media was cleared. Firefox now passes screen-only recording, retained-output/retry flows, microphone-only capture, multiple screens, camera plus two microphones, and playback of all three combined-source files. Native desktop Safari automation was unavailable (remote automation disabled); a WebKit automation engine did not launch successfully. Physical iPhone testing and the 30-minute concurrent recording test are tracked separately and must not be inferred from these desktop results.
 
 ## Reproduce browser checks
 
