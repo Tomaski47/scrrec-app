@@ -6,7 +6,7 @@ const { version } = JSON.parse(readFileSync(new URL('./package.json', import.met
 const buildRevision = process.env.BUILD_REVISION || process.env.GITHUB_SHA || 'local';
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react(), {
     name: 'release-metadata',
     generateBundle() {
@@ -14,9 +14,13 @@ export default defineConfig({
     },
   }],
   define: { __APP_VERSION__: JSON.stringify(version) },
+  // The lab is opt-in and excluded from the normal production build.
+  ...(mode === 'experiments' ? {
+    build: { outDir: 'output/transcription-lab', rollupOptions: { input: ['index.html', 'experiments/transcription.html'] } },
+  } : {}),
   server: {
     host: '127.0.0.1',
     strictPort: false,
     port: 5174,
   },
-});
+}));

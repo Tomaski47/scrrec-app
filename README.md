@@ -83,6 +83,8 @@ npm run check
 
 See [Release 0.2.0](docs/RELEASE_0.2.0.md) for browser checks and the deployment checklist.
 
+An opt-in [local transcription experiment](docs/experiments/LOCAL_TRANSCRIPTION_01.md) is available at `/experiments/transcription.html` on the development server. `npm run build:experiments` creates its separate preview bundle in `output/transcription-lab/`; the normal production build excludes it.
+
 ## Deployment
 
 The app builds to `dist/`. This repository currently tracks the generated `dist` bundle because the live deployment flow expects built static assets in the repo.
@@ -106,7 +108,7 @@ http://localhost:8080/
 
 - Desktop Chromium browsers generally provide the broadest screen, camera, and microphone support.
 - Screen capture is not available on many mobile browsers, but the app does not block by viewport size. If a browser exposes `getDisplayMedia`, the screen picker can be tried.
-- Mobile front/rear camera behavior depends on whether the browser exposes stable camera device IDs.
+- iPhone/iPad camera choices are exclusive; desktop supports multiple camera selections when the hardware/browser permits it. See [camera names and simultaneous capture](docs/experiments/CAMERA_CHOICES.md).
 - Apple Continuity and iPhone microphones are browser/OS-dependent. See [Known Issues and Future Work](docs/KNOWN_ISSUES_AND_FUTURE_WORK.md).
 
 ## Project Docs
@@ -114,6 +116,8 @@ http://localhost:8080/
 - [Release 0.2.0](docs/RELEASE_0.2.0.md)
 - [Known Issues and Future Work](docs/KNOWN_ISSUES_AND_FUTURE_WORK.md)
 - [Local Transcription and Live Assistance Roadmap](docs/LOCAL_TRANSCRIPTION_ROADMAP.md)
+- [Transcription Experiment 01: implementation and measurements](docs/experiments/LOCAL_TRANSCRIPTION_01.md)
+- [Camera Choices](docs/experiments/CAMERA_CHOICES.md)
 - [Open Source Release Checklist](docs/OPEN_SOURCE_RELEASE_CHECKLIST.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)

@@ -1,10 +1,12 @@
 # Local transcription and live assistance roadmap
 
-Updated: October 21, 2026. Status: researched proposal added to the roadmap; no transcription implementation or performance benchmark has been completed in Screen Recorder.
+Updated: October 21, 2026. Status: v0.2.0 reliability release shipped. An isolated local transcription lab now implements short-file and live microphone paths with quantized Whisper Tiny/Base selection. The first Tiny/WASM measurements are complete; this is not integrated into the production recorder. See [the experiment and results](experiments/LOCAL_TRANSCRIPTION_01.md).
 
 ## Product direction
 
 Let a user record and build a transcript locally in the same session. The transcript should also be recoverable by processing a completed recording. Later, finalized text can drive meeting notes, suggested questions, action items, or prompts during a livestream. Release the reliability candidate first, then validate this direction with a small experiment.
+
+The first experiment demonstrates local inference and recording independence, but forced phrase boundaries dropped words. The user confirmed English first. Prioritize overlap and reconciliation next, then consented human speech/noise comparisons, Base/Moonshine, iPhone performance, and concurrency with camera/screen capture. Model caching alone did not permit an offline worker restart; runtime/app caching remains a separate delivery requirement.
 
 Live text is the intended direction. A recorded-audio transcription feature is an early useful outcome and a fallback for devices that cannot transcribe fast enough while capturing video. Build both around the same transcript representation, so adding live assistance does not require replacing the first feature.
 

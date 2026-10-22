@@ -3,7 +3,7 @@ import './App.css';
 import { RecordingSession, AUDIO_BITRATES, type AudioQuality, type CompletedRecording, type SessionState, type Acquisition, type RecordingSource } from './recorder/session';
 import { Modal } from './components/Modal';
 import { RecordingList } from './components/RecordingList';
-import { genericFrontCameraId, genericRearCameraId, genericCameraId, isGenericCameraId, isAppleMobile, requiresSingleCamera, nextCameraIds, cameraChoiceLabels } from './recorder/cameras';
+import { genericFrontCameraId, genericRearCameraId, genericCameraId, isGenericCameraId, isAppleMobile, requiresSingleCamera, nextCameraIds, cameraChoiceLabels, cameraDescription } from './recorder/cameras';
 
 type WebkitAudioWindow = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext;
@@ -1635,12 +1635,13 @@ function App() {
                               ? 'Choose one camera at a time. Selecting another replaces the current camera.'
                               : 'You can select several cameras if your browser and hardware support simultaneous capture.'}
                           </p>
-                          {isAppleMobile(navigator) && cameraDevices.length > 1 && <p className="submenu-hint">Your browser may list lenses and combined camera modes as separate choices.</p>}
+                          {isAppleMobile(navigator) && cameraDevices.length > 1 && <p className="submenu-hint">Combined modes use multiple lenses to provide one video stream. Lens switching depends on your browser.</p>}
                           {cameraDevices.map((device) => (
                             <div key={device.deviceId}>
                               <label className="device-item">
                                 <input
-                                  type="checkbox"
+                                  type={requiresSingleCamera(cameraDevices.map(camera => camera.deviceId), navigator) ? 'radio' : 'checkbox'}
+                                  name="camera-device"
                                   checked={recordOptions.cameraIds.includes(device.deviceId)}
                                   onChange={(e) => {
                                     if (recording) return;
@@ -1657,7 +1658,7 @@ function App() {
                                   }}
                                   disabled={recording || deviceBusy}
                                 />
-                                <span className="device-label">{device.label || "Camera"}</span>
+                                <span className="device-label">{device.label || "Camera"}{cameraDescription(device.label) && <small className="camera-description">{cameraDescription(device.label)}</small>}</span>
                                 <span className="device-permission">
                                   {recordOptions.cameraIds.includes(device.deviceId) && permissionStatus.camera === "granted" ? ": granted" : ""}
                                 </span>

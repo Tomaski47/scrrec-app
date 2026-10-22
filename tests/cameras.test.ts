@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nextCameraIds, requiresSingleCamera, cameraChoiceLabels } from '../src/recorder/cameras.ts';
+import { nextCameraIds, requiresSingleCamera, cameraChoiceLabels, cameraDescription } from '../src/recorder/cameras.ts';
+
+test('recognized Apple lens names have explanations without guessing localized labels or zoom ratios', () => {
+  assert.equal(cameraDescription('Back Camera'), 'Standard rear wide lens');
+  assert.equal(cameraDescription('Back Triple Camera'), 'Combined rear ultra-wide + wide + telephoto mode');
+  assert.equal(cameraDescription('Rückkamera'), undefined);
+});
 
 test('iPhone and iPad replace an existing camera even when real device IDs are exposed', () => {
   for (const browser of [

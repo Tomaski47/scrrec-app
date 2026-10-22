@@ -3754,3 +3754,6 @@ body.light-mode {
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+/* Keep the browser's native camera name visible beside its explanation. */
+.camera-description { display: block; font-size: 0.78em; font-weight: 400; opacity: 0.78; margin-top: 0.2rem; }
+.device-submenu input[type="radio"] { width: 20px; height: 20px; flex: 0 0 20px; accent-color: #21dcc1; cursor: pointer; }

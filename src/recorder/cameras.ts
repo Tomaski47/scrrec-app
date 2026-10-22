@@ -36,3 +36,18 @@ export function cameraChoiceLabels(labels: readonly string[], fallback: string):
     return totals.get(name)! > 1 ? `${name} ${index}` : name;
   });
 }
+
+// Explain recognized native names without guessing from device order or IDs.
+// Labels are localized by the browser; leave unrecognized names untouched.
+export function cameraDescription(label: string): string | undefined {
+  const descriptions: Record<string, string> = {
+    'front camera': 'Selfie camera',
+    'back camera': 'Standard rear wide lens',
+    'back ultra wide camera': 'Rear ultra-wide lens · widest view',
+    'back telephoto camera': 'Rear telephoto lens · closer view',
+    'back dual camera': 'Combined rear wide + telephoto mode',
+    'back dual wide camera': 'Combined rear ultra-wide + wide mode',
+    'back triple camera': 'Combined rear ultra-wide + wide + telephoto mode',
+  };
+  return descriptions[label.trim().toLowerCase()];
+}
