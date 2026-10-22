@@ -1,4 +1,4 @@
-Optional local transcription: third-party software notices
+Local transcription: third-party software notices
 
 Transformers.js 4.3.0 and its bundled Hugging Face Tokenizers 0.2.0:
 Apache-2.0; see huggingface-Apache-2.0.txt.
@@ -19,7 +19,7 @@ These notices were retrieved at runtime commit
 https://github.com/microsoft/onnxruntime
 
 The speech model weights are downloaded separately from Hugging Face only
-after the user chooses Load. Pinned Xenova/whisper-tiny.en and
+when the user enables transcription or chooses Load model. Pinned Xenova/whisper-tiny.en and
 Xenova/whisper-base.en model cards identify Apache-2.0 licensing.
 https://huggingface.co/Xenova/whisper-tiny.en
 https://huggingface.co/Xenova/whisper-base.en
