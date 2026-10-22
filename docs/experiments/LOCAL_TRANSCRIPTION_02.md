@@ -38,10 +38,12 @@ Raw generated-audio test evidence is local under `output/transcription-benchmark
 
 ## iPhone delivery and test
 
-The preview uses a dedicated HTTPS directory, with the visible badge **IPHONE TRANSCRIPTION PREVIEW 2**. It is a temporary test deployment and may need republishing after a future production container replacement. Preview assets and source revision are separate from the production root and production version metadata.
+The [published preview](https://screc.sadilekinnovation.com/transcription-preview/iphone-2/) uses a dedicated HTTPS directory, with the visible badge **IPHONE TRANSCRIPTION PREVIEW 2**. Its code revision is `a5ec1fd28c36182d41d01f83f178f04a0c829a5e`. It is a temporary test deployment and may need republishing after a future production container replacement. Preview assets and source revision are separate from the production root and production version metadata.
 
 The worklet is emitted as a self-hosted JS file rather than an inline data URL. Safari audio-context resume starts within the Record button gesture, before awaiting microphone permission; a bounded resume failure disables ASR while retaining ordinary recording. Copy test report includes the preview ID, browser, secure-context flag, status, window timings, transcript revisions and model revision. Audio/text are not automatically uploaded.
 
 On Safari, use Tiny and CPU/WASM, load the model, then speak continuously for 25–40 seconds so the test crosses several windows. Stop, wait for text to finish, and compare the ending and joins against audio playback. Test report export/copy is explicit. Keep the tab foregrounded; the live experiment still caps recording at two minutes, with the file path capped separately at 20 MB/60 seconds.
 
-After publication, verify the public HTML badge, each built asset and its hash/MIME, worker/worklet paths, HTTP-to-HTTPS redirect, and model/file inference in a browser. Verify that production `/version.json` and root HTML are unchanged. Physical Safari success remains for the user's phone test.
+Public verification passed: all 12 package files matched their build hashes, JS/CSS had the expected MIME types, HTTPS and the HTTP-to-HTTPS redirect worked, and the worker loaded Tiny successfully. The public AudioWorklet registered without microphone access. After model loading, completed-file inference succeeded with browser networking disabled (2.112 s for the 12.701-second reference). This verifies inference in an already-loaded page, not offline startup.
+
+Production `/version.json` stayed at v0.2.0/revision `3f7e97fbd6f1e6f474c44a8a509d15c339298ee7`, and the production root HTML hash was identical before/after preview publication. Hosted source/container checks passed. Physical Safari success remains for the user's phone test.
