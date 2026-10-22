@@ -1,6 +1,6 @@
 # Local transcription 04: longer sessions and main-recorder integration
 
-October 22, 2026. Feature on the transcription branch; production deployment remains v0.2.0. Builds include the engine assets, but they are requested only after enabling the option. This extends [Preview 3](LOCAL_TRANSCRIPTION_03.md) without changing its pinned speech engine/model.
+October 22, 2026. Included in [v0.3.0](../RELEASE_0.3.0.md). Builds include the engine assets, requested when enabling transcription or explicitly loading the model. This extends [Preview 3](LOCAL_TRANSCRIPTION_03.md) without changing its pinned speech engine/model. Preview links and deployment statements below record the validation history; temporary public previews are retired with this release. Use the [main recorder](https://screc.sadilekinnovation.com/) for the released feature.
 
 ## Use
 

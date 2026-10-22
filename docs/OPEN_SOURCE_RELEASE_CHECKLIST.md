@@ -1,6 +1,6 @@
 # Open Source Release Checklist
 
-This is the initial OSS release checklist. For the current reliability release, use the [0.2.0 deployment acceptance checklist](RELEASE_0.2.0.md).
+This is the historical initial OSS release checklist. For the current release, use the [0.3.0 release notes](RELEASE_0.3.0.md); the [0.2.0 deployment acceptance checklist](RELEASE_0.2.0.md) records the earlier reliability release.
 
 ## Repo Basics
 

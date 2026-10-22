@@ -1,6 +1,6 @@
 # Screen Recorder
 
-A local-first browser recorder for screen, camera, and microphone capture. The live app is available at [screc.sadilekinnovation.com](https://screc.sadilekinnovation.com/). See [v0.2.0](https://github.com/Tomaski47/scrrec-app/releases/tag/v0.2.0) for the reliability release and verification notes.
+A local-first browser recorder for screen, camera, and microphone capture. The live app is available at [screc.sadilekinnovation.com](https://screc.sadilekinnovation.com/). See [Release 0.3.0](docs/RELEASE_0.3.0.md) for the local transcription update and verification notes. The earlier [v0.2.0](https://github.com/Tomaski47/scrrec-app/releases/tag/v0.2.0) contains the reliability release.
 
 Screen Recorder is a Sadilek Innovation project built from a Bolt DIY start, refined through the 2025 app pass, and refreshed in 2026 with a cleaner UI and a more stable source-selection flow.
 
@@ -81,9 +81,9 @@ Run linting, the recorder lifecycle regression tests, type checking, and a produ
 npm run check
 ```
 
-See [Release 0.2.0](docs/RELEASE_0.2.0.md) for browser checks and the deployment checklist.
+See [Release 0.3.0](docs/RELEASE_0.3.0.md) for the current release and [Release 0.2.0](docs/RELEASE_0.2.0.md) for the earlier reliability checks.
 
-The main recorder includes English local transcription. Select Mic, enable Local transcription, and wait for Local model: loaded before recording. Expand the arrow beside Local transcription to manage the model, including while the checkbox is off. Enabling the option automatically prepares the model; the speech engine downloads nothing while the option is off. If it is not ready, Start Recording asks you to wait, retry, or explicitly record without transcription. Tiny runs on the device using the selected microphone streams; transcription errors or cancellation do not stop recording. Each recording session has a transcript with copy, TXT and JSON export. Starting another recording collapses earlier results into Previous sessions without deleting them; use Clear All to remove them explicitly.
+The main recorder includes English local transcription. Select Mic, enable Local transcription, and wait for Local model: loaded before recording. Expand the arrow beside Local transcription to manage the model, including while the checkbox is off. Enabling the option automatically prepares the model; the speech engine downloads nothing until you enable transcription or explicitly choose Load model. If it is not ready, Start Recording asks you to wait, retry, or explicitly record without transcription. Tiny runs on the device using the selected microphone streams; transcription errors or cancellation do not stop recording. Each recording session has a transcript with copy, TXT and JSON export. Starting another recording collapses earlier results into Previous sessions without deleting them; use Clear All to remove them explicitly.
 
 Live transcription has no fixed time cutoff. PCM, queued jobs and the revisable text remain bounded; saved transcript text and encoded recordings still grow in tab memory. Keep the tab open and save regularly. iPhone/iPad app switching or screen locking may interrupt transcription. This does not promise unlimited phone endurance or offline startup. See [integration and validation](docs/experiments/LOCAL_TRANSCRIPTION_04.md).
 
@@ -99,6 +99,8 @@ Docker deployment is also supported:
 docker build --build-arg BUILD_REVISION="$(git rev-parse HEAD)" -t screen-recorder .
 docker run --rm -p 8080:80 screen-recorder
 ```
+
+Production excludes the research lab and retires temporary `/recorder-preview/`, `/transcription-preview/`, `/release-check/`, `/experiments/` and Whisper test URLs with 404 responses.
 
 The image includes `/healthz` and `/version.json` endpoints. HTML and release metadata revalidate; fingerprinted assets receive long cache lifetimes. Security headers include a report-only CSP pending production validation.
 
@@ -117,6 +119,7 @@ http://localhost:8080/
 
 ## Project Docs
 
+- [Release 0.3.0](docs/RELEASE_0.3.0.md)
 - [Release 0.2.0](docs/RELEASE_0.2.0.md)
 - [Known Issues and Future Work](docs/KNOWN_ISSUES_AND_FUTURE_WORK.md)
 - [Local Transcription and Live Assistance Roadmap](docs/LOCAL_TRANSCRIPTION_ROADMAP.md)
