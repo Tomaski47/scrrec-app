@@ -1,6 +1,6 @@
 # Local transcription 04: longer sessions and main-recorder integration
 
-October 22, 2026. Optional beta on the transcription branch; production deployment remains v0.2.0. Builds include the engine assets, but they are requested only after enabling the option. This extends [Preview 3](LOCAL_TRANSCRIPTION_03.md) without changing its pinned speech engine/model.
+October 22, 2026. Feature on the transcription branch; production deployment remains v0.2.0. Builds include the engine assets, but they are requested only after enabling the option. This extends [Preview 3](LOCAL_TRANSCRIPTION_03.md) without changing its pinned speech engine/model.
 
 ## Use
 
@@ -44,11 +44,11 @@ Use Node 24 and Playwright CLI. Serve a compiled main build on localhost and pro
 
 No new physical iPhone result is claimed. The prior user-confirmed 40-second phone test used Preview 2. Longer-phone endurance, interruptions/thermal limits, broader speech/noise/model comparisons, fully offline startup, long-file decoding and durable recovery remain follow-up gates. Manual phone testing is deferred at the user's request.
 
-## Preview 5 UX follow-up
+## Recorder UX follow-up
 
 Enabling transcription now prepares Tiny automatically. Starting while preparation is pending or failed, while no microphone is selected, or while an overloaded queue is draining opens an explicit choice before any capture prompt. Waiting for readiness does not start capture automatically. Choosing **Record without transcription** turns the option off. Preparation cancellation also turns it off; retry is available after errors. Completed text is retained.
 
-Transcription uses the same source-row dimensions, spacing and theme styles as Screen/Mic/Camera. The copy is shorter and the confusing note about tab/system audio has been removed. Media acquisition and audio routing are unchanged. New captures collapse earlier media and text under **Previous sessions**. A single share lock covers both sections, and previous recordings remain downloadable. Clear All remains explicit.
+Transcription uses the same source-row dimensions, spacing and theme styles as Screen/Mic/Camera. The copy is shorter and the confusing note about tab/system audio has been removed. Download size, model source, license notices and model removal are grouped inside a collapsed About transcription section; no Optional/Beta label is shown. Removing cached model files first unloads transcription and turns its checkbox off, preserving unrelated caches and all media/text. Media acquisition and audio routing are unchanged. New captures collapse earlier media and text under **Previous sessions**. A single share lock covers both sections, and previous recordings remain downloadable. Clear All remains explicit.
 
 Validation: 37 unit tests, lint, types and the production build pass. A controlled-model browser fixture covers loading, missing microphone, readiness without automatic capture, cancellation, retry, explicit fallback, retained-session downloads, global sharing coordination and resource cleanup. A separate actual worker-download failure verifies the default-off path and explicit fallback. The real Tiny/WASM regression retains six playable media files, a finished transcript and a second correctly marked incomplete transcript after cancellation; every track ends. Phone-width (390 px) dark/light measurements show matching 50 px label heights, padding, borders and colors with no horizontal overflow. This remains desktop layout emulation, not a new physical-phone result.
 

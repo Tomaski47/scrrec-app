@@ -1,5 +1,9 @@
 async (page) => {
   if (!/^http:\/\/(127\.0\.0\.1|localhost):/.test(page.url())) throw new Error('Localhost only.');
+  if (await page.locator('.recording-card').count()) {
+    await page.getByRole('button', {name:'Clear All',exact:true}).click();
+    await page.getByRole('dialog', {name:'Clear recordings and transcripts?'}).getByRole('button', {name:'Yes',exact:true}).click();
+  }
   await page.addInitScript(() => { addEventListener('DOMContentLoaded', () => {
     const state = window.recorderTest;
     state.controlledLoads = 0;
@@ -75,6 +79,24 @@ async (page) => {
     return {controlledModel:true,loads:state.controlledLoads,recordings:playback,transcripts:document.querySelectorAll('.transcript-card').length,allTracksEnded:state.tracks.every(t => t.readyState==='ended'),displayCalls:state.calls.filter(c => c.type==='display')};
   });
   if (!report.allTracksEnded || report.displayCalls.some(c => !c.userActivation)) throw new Error(JSON.stringify(report));
+  await toggle.check();
+  if (await page.locator('.speech-info').evaluate(node => node.open)) throw new Error('Download details should start collapsed.');
+  if (await page.getByText('English speech model.', {exact:false}).isVisible()) throw new Error('Download details are not subtle.');
+  await page.evaluate(async () => {
+    const cache = await caches.open('transcription-ux-fixture');
+    await cache.put('https://huggingface.co/Xenova/whisper-tiny.en/resolve/79fb389fc764e7c395bd330e9531d9d32ada7049/config.json', new Response('fixture model'));
+    await cache.put('/__unrelated-cache-fixture', new Response('keep'));
+  });
+  await page.locator('.speech-info > summary').click();
+  await page.getByRole('button', {name:'Remove downloaded transcription model',exact:true}).click();
+  await page.getByText('Cached transcription model files removed.', {exact:true}).waitFor();
+  report.cacheRemoval = await page.evaluate(async () => {
+    const cache = await caches.open('transcription-ux-fixture');
+    const requests = (await cache.keys()).map(request => request.url);
+    await caches.delete('transcription-ux-fixture');
+    return {keptUnrelated:requests.length === 1 && requests[0].endsWith('/__unrelated-cache-fixture'),workerTerminated:window.recorderTest.controlledWorker.terminated};
+  });
+  if (await toggle.isChecked() || !report.cacheRemoval.keptUnrelated || !report.cacheRemoval.workerTerminated) throw new Error(JSON.stringify(report));
   await page.evaluate(report => { window.recorderTest.uxResult = report; }, report);
   return report;
 }

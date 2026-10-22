@@ -126,7 +126,7 @@ const legalDocuments: Record<LegalDocument, {
       },
       {
         heading: 'Optional local transcription',
-        body: 'When enabled and prepared, transcription processes the selected microphone audio on your device. Audio and transcript text are not uploaded for recognition. Preparing the feature downloads a speech engine from this site and model files from Hugging Face, which receives normal download request data. Model files may remain in browser caches; use Remove cached models to remove the model revisions used here. Transcript text remains in this tab until cleared or closed. Save it separately from your recordings.',
+        body: 'When enabled and prepared, transcription processes the selected microphone audio on your device. Audio and transcript text are not uploaded for recognition. Preparing the feature downloads a speech engine from this site and model files from Hugging Face, which receives normal download request data. Model files may remain in browser caches; open About transcription and choose Remove downloaded transcription model to remove the cached model files used here. Transcript text remains in this tab until cleared or closed. Save it separately from your recordings.',
       },
       {
         heading: 'Site and hosting data',
