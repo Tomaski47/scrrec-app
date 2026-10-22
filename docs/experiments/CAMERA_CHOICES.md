@@ -10,9 +10,11 @@ Safari on the tested iPhone 14 Pro lists one front camera and six rear choices. 
 | Back Camera | Standard rear wide lens |
 | Back Ultra Wide Camera | Rear ultra-wide lens · widest view |
 | Back Telephoto Camera | Rear telephoto lens · closer view |
-| Back Dual Camera | Combined rear wide + telephoto mode |
-| Back Dual Wide Camera | Combined rear ultra-wide + wide mode |
-| Back Triple Camera | Combined rear ultra-wide + wide + telephoto mode |
+| Back Dual Camera | Rear wide + telephoto lens group |
+| Back Dual Wide Camera | Rear ultra-wide + wide lens group |
+| Back Triple Camera | Rear ultra-wide + wide + telephoto lens group |
+
+“Both lenses” describes the devices available inside that virtual group, not two independently recorded views. iOS can switch which lens supplies the unified feed. Apple's [switch-over zoom factors](https://developer.apple.com/documentation/avfoundation/avcapturedevice/virtualdeviceswitchovervideozoomfactors) describe that behavior. The web app does not currently control zoom or promise that Safari performs the same switching/fusion as the native Camera app.
 
 Keep the actual browser label. Add descriptions only for recognized English names rather than guessing from device order, hashed IDs, or localized labels. [WebKit's virtual-camera discussion](https://bugs.webkit.org/show_bug.cgi?id=253186) identifies the standard Back Camera and explains the extra virtual entries and localized labels. Apple's definitions confirm [Dual](https://developer.apple.com/documentation/avfoundation/avcapturedevice/devicetype-swift.struct/builtindualcamera), [Dual Wide](https://developer.apple.com/documentation/avfoundation/avcapturedevice/devicetype-swift.struct/builtindualwidecamera), and [Triple](https://developer.apple.com/documentation/avfoundation/avcapturedevice/devicetype-swift.struct/builtintriplecamera) lens combinations.
 

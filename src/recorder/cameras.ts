@@ -45,9 +45,9 @@ export function cameraDescription(label: string): string | undefined {
     'back camera': 'Standard rear wide lens',
     'back ultra wide camera': 'Rear ultra-wide lens · widest view',
     'back telephoto camera': 'Rear telephoto lens · closer view',
-    'back dual camera': 'Combined rear wide + telephoto mode',
-    'back dual wide camera': 'Combined rear ultra-wide + wide mode',
-    'back triple camera': 'Combined rear ultra-wide + wide + telephoto mode',
+    'back dual camera': 'Rear wide + telephoto lens group',
+    'back dual wide camera': 'Rear ultra-wide + wide lens group',
+    'back triple camera': 'Rear ultra-wide + wide + telephoto lens group',
   };
   return descriptions[label.trim().toLowerCase()];
 }

@@ -2,6 +2,8 @@
 
 October 21, 2026. Development experiment; excluded from the normal production build. The shipped app remains v0.2.0.
 
+Historical first baseline. [Preview 2](LOCAL_TRANSCRIPTION_02.md) adds overlapping windows, timestamped reconciliation, and compatible model exports; its original word-loss regression now passes. The model pins and timings below describe the first pass.
+
 ## Try it
 
 With the repository's Node 24 environment, run `npm run dev` and open `/experiments/transcription.html`. To test compiled assets, run `npm run build:experiments`, then `npm run preview -- --outDir output/transcription-lab`. The lab is a separate page and does not modify existing recordings in the main app.

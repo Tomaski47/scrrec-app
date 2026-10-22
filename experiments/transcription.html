@@ -8,7 +8,7 @@
   <body>
     <main>
       <a href="/">← Screen Recorder</a>
-      <p class="eyebrow">EXPERIMENT 01</p>
+      <p class="eyebrow">IPHONE TRANSCRIPTION PREVIEW 2</p>
       <h1>Record. Read along.</h1>
       <p class="intro">Try local English transcription with Whisper. Audio stays in this tab. Loading a model downloads code and weights from jsDelivr and Hugging Face; no audio is sent to them.</p>
       <section aria-labelledby="model-heading">
@@ -23,7 +23,7 @@
         <p>Live mode records one microphone and transcribes that same stream. Keep this page in the foreground. A slow or failed transcript will not stop your recording.</p>
         <label>Microphone <select id="microphone"><option value="">Browser default</option></select></label>
         <div class="actions"><button id="start" disabled>Record + transcribe</button><button id="stop" disabled>Stop recording</button></div>
-        <p id="capture-status" role="status">Live experiment limit: 2 minutes. Speech arrives in phrases up to 8 seconds long.</p>
+        <p id="capture-status" role="status">Live experiment limit: 2 minutes. Text appears after about 8 seconds; draft endings may change as more speech arrives.</p>
         <div id="recording"></div>
         <hr />
         <label>Or choose a completed audio/video file (max 20 MB and 60 seconds)<input id="file" type="file" accept="audio/*,video/*" /></label>
@@ -31,9 +31,9 @@
       </section>
       <section aria-labelledby="transcript-heading">
         <h2 id="transcript-heading">Transcript <span id="transcript-state"></span></h2>
-        <p>Export before starting another test: a new test replaces this transcript. No speaker identification. Verify names, numbers, and phrase boundaries against the recording.</p>
+        <p>Export before starting another test: a new test replaces this transcript. Overlapping audio helps preserve words at joins. Check any join flagged for review, along with names and numbers.</p>
         <ol id="transcript" aria-live="polite"></ol>
-        <div class="actions"><button id="export">Download transcript + measurements</button></div>
+        <div class="actions"><button id="export">Download transcript + measurements</button><button id="copy-report">Copy test report</button></div>
         <details><summary>Measurements</summary><pre id="metrics"></pre></details>
       </section>
     </main>

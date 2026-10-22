@@ -3,7 +3,7 @@ import { MODELS, type Request, type Response } from './protocol';
 // Exact runtime version, fetched only after the explicit Load action. Keep this
 // external in the experiment; production delivery needs self-hosted assets/CSP QA.
 const runtimeURL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
-type Recognizer = (audio: Float32Array, options: Record<string, unknown>) => Promise<{ text: string }>;
+type Recognizer = (audio: Float32Array, options: Record<string, unknown>) => Promise<{ text: string; chunks?: { text: string; timestamp: [number, number | null] }[] }>;
 let recognizer: Recognizer | undefined;
 let busy = false;
 const send = (message: Response) => self.postMessage(message);
@@ -30,8 +30,11 @@ self.addEventListener('message', async (event: MessageEvent<Request>) => {
     } else {
       if (!recognizer) throw new Error('Load a model first.');
       if (message.audio.length > 60 * 16_000) throw new Error('Audio exceeds the experiment limit.');
-      const result = await recognizer(message.audio, { chunk_length_s: 25, stride_length_s: 3, max_new_tokens: 128, do_sample: false });
-      send({ type: 'result', id: message.id, text: result.text.trim(), ms: performance.now() - began });
+      const result = await recognizer(message.audio, { chunk_length_s: 25, stride_length_s: 3, max_new_tokens: 128, do_sample: false, return_timestamps: message.wordTimings ? 'word' : false });
+      const duration = message.audio.length / 16_000;
+      const words = (result.chunks || []).map(chunk => ({ text: chunk.text, start: chunk.timestamp[0], end: chunk.timestamp[1] ?? duration }));
+      if (message.wordTimings && result.text.trim() && (!words.length || words.some(word => !Number.isFinite(word.start) || !Number.isFinite(word.end)))) throw new Error('Word timings unavailable; save the recording and retry file transcription.');
+      send({ type: 'result', id: message.id, text: result.text.trim(), words, ms: performance.now() - began });
     }
   } catch (error) {
     send({ type: 'error', message: error instanceof Error ? error.message : String(error) });

@@ -4,7 +4,7 @@ import { nextCameraIds, requiresSingleCamera, cameraChoiceLabels, cameraDescript
 
 test('recognized Apple lens names have explanations without guessing localized labels or zoom ratios', () => {
   assert.equal(cameraDescription('Back Camera'), 'Standard rear wide lens');
-  assert.equal(cameraDescription('Back Triple Camera'), 'Combined rear ultra-wide + wide + telephoto mode');
+  assert.equal(cameraDescription('Back Triple Camera'), 'Rear ultra-wide + wide + telephoto lens group');
   assert.equal(cameraDescription('Rückkamera'), undefined);
 });
 

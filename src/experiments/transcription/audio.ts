@@ -1,5 +1,6 @@
 import type { Segment } from './protocol.ts';
 export const SAMPLE_RATE = 16_000;
+export const OVERLAP_SECONDS = 3;
 
 /** Stateful linear resampling: preserves the fractional position across blocks. */
 export class Resampler {
@@ -28,7 +29,10 @@ export class Segmenter {
   private clock = 0;
   private sequence = 0;
   private start = 0;
+  private utterance = 0;
+  private overlap = 0;
   private samples: number[] = [];
+  private preRoll: number[] = [];
   private silent = 0;
   private voiced = 0;
   private emit: (segment: Segment) => void;
@@ -39,21 +43,40 @@ export class Segmenter {
       const frame = block.subarray(offset, offset + 320);
       const rms = Math.sqrt(frame.reduce((sum, x) => sum + x * x, 0) / frame.length);
       const speech = rms > 0.012;
-      if (speech && !this.samples.length) this.start = this.clock;
+      if (speech && !this.samples.length) {
+        this.samples = this.preRoll; this.preRoll = [];
+        this.start = this.clock - this.samples.length; this.utterance++;
+      }
       if (speech || this.samples.length) {
         for (const sample of frame) this.samples.push(sample);
         if (speech) { this.voiced += frame.length; this.silent = 0; }
         else this.silent += frame.length;
       }
       this.clock += frame.length;
-      if (this.silent >= SAMPLE_RATE * 0.7 || this.samples.length >= SAMPLE_RATE * 8) this.flush();
+      if (!this.samples.length) {
+        this.preRoll.push(...frame);
+        this.preRoll = this.preRoll.slice(-SAMPLE_RATE * 0.2);
+      }
+      if (this.silent >= SAMPLE_RATE * 0.7) this.flush();
+      else if (this.samples.length >= SAMPLE_RATE * 8) {
+        this.emitWindow(false);
+        this.samples = this.samples.slice(-SAMPLE_RATE * OVERLAP_SECONDS);
+        this.start = this.clock - this.samples.length;
+        this.overlap = this.samples.length / SAMPLE_RATE;
+        // Retained speech also needs a final result if Stop follows this cut.
+        this.voiced = this.samples.length;
+      }
     }
   }
   flush() {
-    if (this.voiced >= SAMPLE_RATE * 0.2) {
-      this.emit({ id: ++this.sequence, start: this.start / SAMPLE_RATE, end: (this.start + this.samples.length) / SAMPLE_RATE, audio: Float32Array.from(this.samples) });
-    }
-    this.samples = []; this.silent = 0; this.voiced = 0;
+    if (this.voiced >= SAMPLE_RATE * 0.2) this.emitWindow(true);
+    this.preRoll = this.samples.slice(-SAMPLE_RATE * 0.2);
+    this.samples = []; this.silent = 0; this.voiced = 0; this.overlap = 0;
+  }
+  private emitWindow(final: boolean) {
+    this.emit({ id: ++this.sequence, utterance: this.utterance, overlap: this.overlap,
+      final, wordTimings: true, start: this.start / SAMPLE_RATE,
+      end: (this.start + this.samples.length) / SAMPLE_RATE, audio: Float32Array.from(this.samples) });
   }
 }
 

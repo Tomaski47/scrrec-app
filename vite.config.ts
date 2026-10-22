@@ -13,10 +13,10 @@ export default defineConfig(({ mode }) => ({
       this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ version, revision: buildRevision }) + '\n' });
     },
   }],
-  define: { __APP_VERSION__: JSON.stringify(version) },
+  define: { __APP_VERSION__: JSON.stringify(version), 'import.meta.env.VITE_BUILD_REVISION': JSON.stringify(buildRevision) },
   // The lab is opt-in and excluded from the normal production build.
   ...(mode === 'experiments' ? {
-    build: { outDir: 'output/transcription-lab', rollupOptions: { input: ['index.html', 'experiments/transcription.html'] } },
+    build: { outDir: 'output/transcription-lab', assetsInlineLimit: 0, rollupOptions: { input: ['index.html', 'experiments/transcription.html'] } },
   } : {}),
   server: {
     host: '127.0.0.1',

@@ -1635,7 +1635,7 @@ function App() {
                               ? 'Choose one camera at a time. Selecting another replaces the current camera.'
                               : 'You can select several cameras if your browser and hardware support simultaneous capture.'}
                           </p>
-                          {isAppleMobile(navigator) && cameraDevices.length > 1 && <p className="submenu-hint">Combined modes use multiple lenses to provide one video stream. Lens switching depends on your browser.</p>}
+                          {isAppleMobile(navigator) && cameraDevices.length > 1 && <p className="submenu-hint">Dual and Triple are lens groups with one video output. The browser controls lens selection.</p>}
                           {cameraDevices.map((device) => (
                             <div key={device.deviceId}>
                               <label className="device-item">
