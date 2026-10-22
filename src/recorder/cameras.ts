@@ -24,3 +24,15 @@ export function nextCameraIds(current: string[], next: string, checked: boolean,
   if (requiresSingleCamera([...current, next], browser)) return [next];
   return current.includes(next) ? current : [...current, next];
 }
+
+export function cameraChoiceLabels(labels: readonly string[], fallback: string): string[] {
+  const names = labels.map(label => label.trim() || fallback);
+  const totals = new Map<string, number>();
+  const seen = new Map<string, number>();
+  names.forEach(name => totals.set(name, (totals.get(name) || 0) + 1));
+  return names.map(name => {
+    const index = (seen.get(name) || 0) + 1;
+    seen.set(name, index);
+    return totals.get(name)! > 1 ? `${name} ${index}` : name;
+  });
+}

@@ -3,7 +3,7 @@ import './App.css';
 import { RecordingSession, AUDIO_BITRATES, type AudioQuality, type CompletedRecording, type SessionState, type Acquisition, type RecordingSource } from './recorder/session';
 import { Modal } from './components/Modal';
 import { RecordingList } from './components/RecordingList';
-import { genericFrontCameraId, genericRearCameraId, genericCameraId, isGenericCameraId, isAppleMobile, requiresSingleCamera, nextCameraIds } from './recorder/cameras';
+import { genericFrontCameraId, genericRearCameraId, genericCameraId, isGenericCameraId, isAppleMobile, requiresSingleCamera, nextCameraIds, cameraChoiceLabels } from './recorder/cameras';
 
 type WebkitAudioWindow = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext;
@@ -663,23 +663,19 @@ function App() {
           // Categorize based on existing labels
           const labelLower = label.toLowerCase();
           if (labelLower.includes('front') || labelLower.includes('facing user') || labelLower.includes('facetime')) {
-            frontCameras.push(copyMediaDevice(device, { label: 'Front Camera' }));
+            frontCameras.push(copyMediaDevice(device));
           } else if (labelLower.includes('back') || labelLower.includes('rear') || labelLower.includes('facing environment')) {
-            rearCameras.push(copyMediaDevice(device, { label: 'Rear Camera' }));
+            rearCameras.push(copyMediaDevice(device));
           } else {
             unknownCameras.push(copyMediaDevice(device));
           }
         }
       });
       
-      // Number duplicate labels
+      // Keep native lens/mode names; number only genuinely identical labels.
       const numberDuplicates = (cameras: MediaDeviceInfo[], baseLabel: string) => {
-        if (cameras.length > 1) {
-          return cameras.map((cam, idx) => copyMediaDevice(cam, {
-            label: `${baseLabel} ${idx + 1}`
-          }));
-        }
-        return cameras;
+        const labels = cameraChoiceLabels(cameras.map(camera => camera.label), baseLabel);
+        return cameras.map((camera, index) => copyMediaDevice(camera, { label: labels[index] }));
       };
       
       const numberedFront = numberDuplicates(frontCameras, 'Front Camera');
@@ -1639,6 +1635,7 @@ function App() {
                               ? 'Choose one camera at a time. Selecting another replaces the current camera.'
                               : 'You can select several cameras if your browser and hardware support simultaneous capture.'}
                           </p>
+                          {isAppleMobile(navigator) && cameraDevices.length > 1 && <p className="submenu-hint">Your browser may list lenses and combined camera modes as separate choices.</p>}
                           {cameraDevices.map((device) => (
                             <div key={device.deviceId}>
                               <label className="device-item">

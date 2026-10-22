@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nextCameraIds, requiresSingleCamera } from '../src/recorder/cameras.ts';
+import { nextCameraIds, requiresSingleCamera, cameraChoiceLabels } from '../src/recorder/cameras.ts';
 
 test('iPhone and iPad replace an existing camera even when real device IDs are exposed', () => {
   for (const browser of [
@@ -12,6 +12,19 @@ test('iPhone and iPad replace an existing camera even when real device IDs are e
     assert.deepEqual(nextCameraIds(['front-device-id'], 'rear-device-id', true, browser), ['rear-device-id']);
     assert.deepEqual(nextCameraIds(['rear-device-id'], 'rear-device-id', false, browser), []);
   }
+});
+
+test('native physical and combined lens names stay distinct; only identical labels are numbered', () => {
+  assert.deepEqual(cameraChoiceLabels([
+    'Back Camera', 'Back Ultra Wide Camera', 'Back Telephoto Camera',
+    'Back Dual Camera', 'Back Dual Wide Camera', 'Back Triple Camera',
+  ], 'Rear Camera'), [
+    'Back Camera', 'Back Ultra Wide Camera', 'Back Telephoto Camera',
+    'Back Dual Camera', 'Back Dual Wide Camera', 'Back Triple Camera',
+  ]);
+  assert.deepEqual(cameraChoiceLabels(['Rückkamera', 'Back Camera', 'Rückkamera', ''], 'Rear Camera'), [
+    'Rückkamera 1', 'Back Camera', 'Rückkamera 2', 'Rear Camera',
+  ]);
 });
 
 test('desktop keeps multiple real cameras; fallback camera choices remain exclusive', () => {
