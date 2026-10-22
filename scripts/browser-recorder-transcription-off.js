@@ -14,6 +14,7 @@ async (page) => {
   if ((await speechRequests()).length) throw new Error('Unexpected speech download during ordinary recording.');
   await page.route('**/worker-*.js', route => route.abort());
   await page.getByRole('checkbox', { name: 'Local transcription', exact: true }).check();
+  await page.getByRole('button', {name:/Transcription settings/}).click();
   await page.getByRole('button', { name: 'Retry preparation', exact: true }).waitFor();
   const callsBefore = await page.evaluate(() => window.recorderTest.calls.length);
   await page.getByRole('button', { name: 'Start Recording', exact: true }).click();

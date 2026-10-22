@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { sessionText, type SpeechSession, type SpeechSnapshot } from '../transcription/controller';
 import { MODELS, RETIRED_MODELS } from '../transcription/protocol';
 import './LocalTranscription.css';
@@ -7,6 +7,9 @@ interface Props { enabled: boolean; setEnabled: (enabled: boolean) => void; reco
 export function LocalTranscription({ enabled, setEnabled, recording, hasMic, speech, prepare, unload }: Props) {
   const [cacheMessage, setCacheMessage] = useState('');
   const [removing, setRemoving] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const panelId = useId();
+  const modelLabel = speech.modelStatus === 'ready' ? 'Loaded' : speech.modelStatus === 'loading' ? 'Loading' : speech.modelStatus === 'error' ? 'Unavailable' : 'Not loaded';
   const removeCache = async () => {
     unload();
     setRemoving(true);
@@ -28,28 +31,34 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
   };
   return <div className="transcription-control">
     <section className={`option-block transcription-option${enabled ? ' has-submenu' : ''}`} aria-labelledby="speech-heading">
-      <label className="options-checkbox"><input className="styled-checkbox" type="checkbox" checked={enabled} disabled={recording || removing} onChange={event => { setCacheMessage(''); setEnabled(event.target.checked); }} />
-        <span id="speech-heading">Local transcription</span>
+      <label className="options-checkbox"><input className="styled-checkbox" type="checkbox" aria-label="Local transcription" checked={enabled} disabled={recording || removing} onChange={event => { setCacheMessage(''); setEnabled(event.target.checked); }} />
+        <span className="speech-label"><span id="speech-heading">Local transcription</span><small className="speech-model-label" aria-live="polite">Local model: {modelLabel.toLowerCase()}</small></span>
       </label>
-      {enabled && <div className="device-submenu speech-setup">
-        <p>Audio and text stay on your device. Keep this tab open and in the foreground.</p>
-        {!hasMic && <p className="speech-hint">Select Mic above for transcription.</p>}
+      <button type="button" className="speech-expand" aria-label={`Transcription settings. Model ${modelLabel.toLowerCase()}`} aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpanded(value => !value)}>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" style={{ transform: expanded ? 'rotate(180deg)' : undefined }}><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
+      </button>
+      <div id={panelId} className="device-submenu speech-setup" hidden={!expanded}>
+        {enabled && <p>Audio and text stay on your device.</p>}
+        {enabled && !hasMic && <p className="speech-hint">Select Mic above for transcription.</p>}
         <div className="speech-actions">
-          {(speech.modelStatus === 'loading' || speech.modelStatus === 'ready')
-            ? <span className="speech-readiness">{speech.modelStatus === 'loading' ? 'Preparing transcription…' : 'Ready to transcribe'}</span>
-            : <button className="speech-button" disabled={recording} onClick={prepare}>Retry preparation</button>}
-          <button className="speech-button" onClick={unload}>{recording ? 'Stop transcription' : speech.modelStatus === 'loading' ? 'Cancel preparation' : 'Turn off'}</button>
+          {recording && enabled
+            ? <button className="mini-action" onClick={() => setEnabled(false)}>Stop transcription</button>
+            : speech.modelStatus === 'ready' || speech.modelStatus === 'loading'
+              ? <button className="mini-action" onClick={unload}>{speech.modelStatus === 'loading' ? 'Cancel preparation' : 'Unload model'}</button>
+              : <button className="mini-action" disabled={recording || removing} onClick={prepare}>{speech.modelStatus === 'error' ? 'Retry preparation' : 'Load model'}</button>}
+          {!recording && <button className="mini-action" disabled={removing} onClick={() => void removeCache()}>Remove model</button>}
         </div>
-        <p className={`speech-status${speech.modelStatus === 'error' ? ' speech-warning' : ''}`} role={speech.modelStatus === 'error' ? 'alert' : 'status'}>{speech.message}</p>
-        <p className="speech-footnote">Review names and important details. Save recordings and transcripts before closing this tab.</p>
+        {speech.message && (speech.modelStatus === 'error' || speech.modelStatus === 'ready') && <p className={`speech-status${speech.modelStatus === 'error' ? ' speech-warning' : ''}`} role={speech.modelStatus === 'error' ? 'alert' : 'status'}>{speech.message}</p>}
         <details className="speech-info">
           <summary>About transcription</summary>
           <p>English speech model. About 60 MB on first use, downloaded from Hugging Face and cached when available.</p>
-          {!recording && <button className="speech-button" disabled={removing} onClick={() => void removeCache()}>Remove downloaded transcription model</button>}
+          <p>Unload model frees memory. Remove model also deletes its cached download.</p>
+          <p>On iPhone and iPad, switching apps or locking the screen may interrupt transcription.</p>
+          <p>Review important details. Save recordings and transcripts before closing this tab.</p>
           <p><a href={`${import.meta.env.BASE_URL}licenses/README.txt`} target="_blank" rel="noreferrer">Speech engine notices</a></p>
         </details>
-      </div>}
-      {cacheMessage && <p className="speech-cache-message speech-footnote" role="status">{cacheMessage}</p>}
+        {cacheMessage && <p className="speech-cache-message speech-footnote" role="status">{cacheMessage}</p>}
+      </div>
     </section>
   </div>;
 }
@@ -79,18 +88,18 @@ function TranscriptCard({ session }: { session: SpeechSession }) {
       const text = event.currentTarget;
       follow.current = text.scrollHeight - text.clientHeight - text.scrollTop < 60;
     }}>
-      {session.blocks.length > visible && <button className="speech-button" onClick={() => { follow.current = false; setVisible(value => value + 20); }}>Show earlier paragraphs</button>}
+      {session.blocks.length > visible && <button className="mini-action" onClick={() => { follow.current = false; setVisible(value => value + 20); }}>Show earlier paragraphs</button>}
       {session.blocks.slice(-visible).map(block => <p key={block.id}><span className="speech-time">{time(block.start)}{(block.boundaryReview || block.recognitionReview) && ' · review'}</span>{block.text.trim()}</p>)}
       {session.draft && <p className="speech-draft"><span className="speech-time">Draft ending · may change</span>{session.draft}</p>}
       {!session.blocks.length && !session.draft && <p>Text appears after a phrase or about 12 seconds of continuous speech.</p>}
     </div>
     <div className="speech-actions">
-      <button className="speech-button" onClick={() => {
+      <button className="mini-action" onClick={() => {
         if (!navigator.clipboard?.writeText) { setFeedback('Copy unavailable. Use Save TXT.'); return; }
         void navigator.clipboard.writeText(sessionText(session)).then(() => setFeedback('Copied.'), () => setFeedback('Copy unavailable. Use Save TXT.'));
       }}>Copy text</button>
-      <button className="speech-button" onClick={() => download(false)}>Save TXT</button>
-      <button className="speech-button" onClick={() => download(true)}>Save JSON</button>
+      <button className="mini-action" onClick={() => download(false)}>Save TXT</button>
+      <button className="mini-action" onClick={() => download(true)}>Save JSON</button>
     </div>
     <span role="status">{feedback}</span>
   </article>;

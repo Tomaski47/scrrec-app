@@ -25,6 +25,7 @@ async (page) => {
   const start = page.getByRole('button',{name:'Start Recording',exact:true});
   const stop = page.getByRole('button',{name:'Stop Recording',exact:true});
   await page.getByRole('checkbox',{name:'Screen',exact:true}).check();
+  await page.getByRole('button', {name:/Transcription settings/}).click();
   await toggle.check();
   if (await page.evaluate(() => window.recorderTest.controlledLoads) !== 1) throw new Error('Enable did not prepare exactly once.');
   await start.click();
@@ -54,8 +55,13 @@ async (page) => {
   const saved = page.waitForEvent('download');
   await page.locator('.session-history .recording-card').first().getByRole('button',{name:'Save',exact:true}).click();
   await (await saved).saveAs('output/playwright/ux5-previous-recording.webm');
-  await page.getByRole('button',{name:'Turn off',exact:true}).click();
-  if (await toggle.isChecked()) throw new Error('Turn off left checkbox enabled.');
+  await toggle.uncheck();
+  await page.getByText('Local model: loaded', {exact:true}).waitFor();
+  if (await page.evaluate(() => window.recorderTest.controlledWorker.terminated)) throw new Error('Unchecking unloaded the model.');
+  await toggle.check();
+  if (await page.evaluate(() => window.recorderTest.controlledLoads) !== 1) throw new Error('Checking did not reuse the loaded model.');
+  await page.getByRole('button',{name:'Unload model',exact:true}).click();
+  if (await toggle.isChecked()) throw new Error('Unloading left checkbox enabled.');
   await toggle.check();
   await page.getByRole('button',{name:'Cancel preparation',exact:true}).click();
   if (await toggle.isChecked()) throw new Error('Cancel left checkbox enabled.');
@@ -79,7 +85,10 @@ async (page) => {
     return {controlledModel:true,loads:state.controlledLoads,recordings:playback,transcripts:document.querySelectorAll('.transcript-card').length,allTracksEnded:state.tracks.every(t => t.readyState==='ended'),displayCalls:state.calls.filter(c => c.type==='display')};
   });
   if (!report.allTracksEnded || report.displayCalls.some(c => !c.userActivation)) throw new Error(JSON.stringify(report));
-  await toggle.check();
+  await page.getByRole('button', {name:'Retry preparation',exact:true}).click();
+  await page.evaluate(() => window.recorderTest.controlledWorker.reply({type:'ready',ms:1}));
+  await page.getByText('Local model: loaded', {exact:true}).waitFor();
+  if (await toggle.isChecked()) throw new Error('Managing the model enabled transcription.');
   if (await page.locator('.speech-info').evaluate(node => node.open)) throw new Error('Download details should start collapsed.');
   if (await page.getByText('English speech model.', {exact:false}).isVisible()) throw new Error('Download details are not subtle.');
   await page.evaluate(async () => {
@@ -87,8 +96,7 @@ async (page) => {
     await cache.put('https://huggingface.co/Xenova/whisper-tiny.en/resolve/79fb389fc764e7c395bd330e9531d9d32ada7049/config.json', new Response('fixture model'));
     await cache.put('/__unrelated-cache-fixture', new Response('keep'));
   });
-  await page.locator('.speech-info > summary').click();
-  await page.getByRole('button', {name:'Remove downloaded transcription model',exact:true}).click();
+  await page.getByRole('button', {name:'Remove model',exact:true}).click();
   await page.getByText('Cached transcription model files removed.', {exact:true}).waitFor();
   report.cacheRemoval = await page.evaluate(async () => {
     const cache = await caches.open('transcription-ux-fixture');

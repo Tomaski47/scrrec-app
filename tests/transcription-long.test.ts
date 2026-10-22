@@ -118,6 +118,21 @@ test('unloading preserves completed text and ignores terminated worker responses
   } finally { controller.dispose(); }
 });
 
+test('turning transcription off drains accepted text and keeps the model available', async () => {
+  const { controller, worker, taps } = setup();
+  try {
+    const capture = controller.beginCapture('first', 'mic')!; controller.activateCapture();
+    taps[0].emit(1); controller.stopCapture();
+    assert.ok(taps[0].aborted); assert.equal(worker.terminated, false);
+    assert.equal(controller.snapshot().modelStatus, 'ready');
+    worker.result('kept'); await capture.finish();
+    assert.equal(sessionText(controller.snapshot().sessions[0]), 'kept');
+    assert.ok(controller.snapshot().sessions[0].finished && controller.snapshot().sessions[0].incomplete);
+    assert.ok(controller.beginCapture('next', 'mic'));
+    assert.equal(worker.sent.filter(message => message.type === 'load').length, 1);
+  } finally { controller.dispose(); }
+});
+
 test('an unavailable model never creates a microphone tap', () => {
   let taps = 0;
   const controller = new TranscriptionController({ tap: () => { taps++; throw new Error('unexpected'); } });

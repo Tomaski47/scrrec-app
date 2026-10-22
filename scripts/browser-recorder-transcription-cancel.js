@@ -3,7 +3,8 @@ async (page) => {
   await page.unroute('**/worker-*.js');
   page.once('dialog', dialog => dialog.accept()); await page.reload();
   await page.getByRole('checkbox', { name: 'Local transcription' }).check();
-  await page.getByText('Ready to transcribe', { exact: true }).waitFor({ timeout: 60000 });
+  if (await page.getByRole('button', {name:/Transcription settings/}).getAttribute('aria-expanded') === 'false') await page.getByRole('button', {name:/Transcription settings/}).click();
+  await page.getByText('Local model: loaded', { exact: true }).waitFor({ timeout: 60000 });
   await page.getByRole('checkbox', { name: 'Mic', exact: true }).check();
   await page.getByRole('checkbox', { name: 'Camera', exact: true }).check();
   await page.getByRole('checkbox', { name: 'Screen', exact: true }).check();

@@ -77,7 +77,7 @@ export class TranscriptionController {
         if (this.worker !== worker) return;
         if (data.type === 'progress') this.message = 'Preparing transcription. Downloaded files will be reused when available.';
         else if (data.type === 'ready') {
-          clearTimeout(this.timeout); this.status = 'ready'; this.message = 'Ready · speech is processed on this device.';
+          clearTimeout(this.timeout); this.status = 'ready'; this.message = '';
         } else if (data.type === 'error') { this.fail(data.message); return; }
         else {
           // Ignore stale/unexpected responses without clearing another job's timer.
@@ -135,6 +135,7 @@ export class TranscriptionController {
           catch { entry.view.incomplete = 'Transcription could not finish. The recording is kept separately.'; tap.abort(); }
           if (this.active?.id === id) this.active = undefined;
           entry.ended = true; entry.view.capturing = false;
+          if (!entry.view.incomplete) this.message = '';
           if (!entry.activated && !entry.pending) this.entries.delete(id);
           else this.settle(entry);
           this.publish();
@@ -148,8 +149,9 @@ export class TranscriptionController {
     if (!this.active) return;
     const entry = this.entries.get(this.active.id)!;
     entry.activated = true; entry.view.capturing = true; entry.view.createdAt = new Date().toISOString();
-    this.active.tap.activate(); this.publish();
+    this.active.tap.activate(); this.message = 'Listening for speech.'; this.publish();
   }
+  stopCapture() { this.stopTap('Transcription stopped. Existing text is kept; recording continues.'); }
   private stopTap(message: string) {
     if (this.active) {
       const entry = this.entries.get(this.active.id)!;

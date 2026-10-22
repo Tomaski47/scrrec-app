@@ -1,20 +1,29 @@
 .local-transcription { margin: 1.5rem 0; padding: 1.25rem; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 14px; text-align: left; }
 .transcription-control { width: 100%; text-align: left; }
+.transcription-option { position: relative; }
+.recorder-panel .transcription-option > label.options-checkbox { height: 50px; min-height: 50px; padding: 6px 52px 6px 16px; }
+.speech-label { display: flex; flex-direction: column; gap: 1px; line-height: 18px; }
+.speech-model-label { font-size: .7rem; font-weight: 400; line-height: 13px; opacity: .75; }
+.speech-expand { position: absolute; right: 4px; top: 3px; display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 8px; border: 0; border-radius: 6px; color: inherit; background: transparent; font: inherit; cursor: pointer; }
+.speech-expand:focus-visible { outline: 3px solid #13cbb4; outline-offset: 1px; }
+.App .recorder-panel .transcription-option button.speech-expand,
+.App .recorder-panel .transcription-option button.speech-expand:hover { background: transparent; box-shadow: none; transform: none; }
+.transcription-option [hidden] { display: none !important; }
 .speech-setup p, .transcript-card > p { font-size: .9rem; line-height: 1.6; margin: .8rem 0; }
 .speech-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
-.speech-button { min-height: 44px; padding: .6rem .9rem; border-radius: 8px; background: transparent; color: inherit; border: 1px solid #268b8c; cursor: pointer; font: inherit; font-size: .9rem; }
-.speech-button:hover:not(:disabled) { background: #13cbb41a; }
-.speech-button:focus-visible, .transcription-option input:focus-visible { outline: 3px solid #13cbb4; outline-offset: 3px; }
-.speech-button:disabled { opacity: .5; cursor: default; }
+.recorder-panel .transcription-option .speech-setup { display: flex; flex-direction: column; gap: 8px; padding: 8px 16px 12px; }
+.recorder-panel .transcription-option .speech-setup p { margin: 0; font-size: .82rem; line-height: 1.45; }
+.speech-actions .mini-action { min-height: 44px; }
+.transcription-option input:focus-visible { outline: 3px solid #13cbb4; outline-offset: 3px; }
 .speech-footnote { opacity: .7; }
 .local-transcription a, .speech-setup a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .speech-status { color: inherit; }
 .speech-hint, .speech-warning { border-left: 2px solid #c99e54; padding-left: .75rem; }
-.speech-readiness { display: inline-flex; align-items: center; min-height: 44px; font-size: .9rem; }
-.speech-info { font-size: .85rem; margin-top: .5rem; }
+.speech-info { font-size: .8rem; }
 .speech-info > summary { cursor: pointer; padding: .5rem 0; min-height: 44px; box-sizing: border-box; opacity: .75; }
 .speech-info > summary:focus-visible { outline: 3px solid #13cbb4; outline-offset: 3px; }
-.speech-cache-message { margin: 0 16px 14px; font-size: .85rem; }
+.recorder-panel .transcription-option .speech-info p { margin: 6px 0; }
+.speech-cache-message { font-size: .85rem; }
 .session-retention { font-size: .85rem; opacity: .7; }
 .session-result-heading { font-size: 1rem; text-align: left; margin-top: 1.5rem; }
 .session-history { margin: 1.5rem 0; text-align: left; border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent); padding-top: .5rem; }

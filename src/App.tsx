@@ -126,7 +126,7 @@ const legalDocuments: Record<LegalDocument, {
       },
       {
         heading: 'Optional local transcription',
-        body: 'When enabled and prepared, transcription processes the selected microphone audio on your device. Audio and transcript text are not uploaded for recognition. Preparing the feature downloads a speech engine from this site and model files from Hugging Face, which receives normal download request data. Model files may remain in browser caches; open About transcription and choose Remove downloaded transcription model to remove the cached model files used here. Transcript text remains in this tab until cleared or closed. Save it separately from your recordings.',
+        body: 'When enabled and prepared, transcription processes the selected microphone audio on your device. Audio and transcript text are not uploaded for recognition. Preparing the feature downloads a speech engine from this site and model files from Hugging Face, which receives normal download request data. Model files may remain in browser caches; choose Remove model in the transcription controls to remove the cached model files used here. Transcript text remains in this tab until cleared or closed. Save it separately from your recordings.',
       },
       {
         heading: 'Site and hosting data',
@@ -1012,8 +1012,8 @@ function App() {
   const changeTranscription = (enabled: boolean) => {
     setTranscriptionEnabled(enabled);
     const engine = transcriptionRef.current;
-    if (!enabled) engine?.unload('Transcription turned off. Existing text is kept. Recording continues if active.');
-    else if (engine && !['ready', 'loading'].includes(engine.snapshot().modelStatus)) engine.load();
+    if (!enabled && recording) engine?.stopCapture();
+    else if (enabled && engine && !['ready', 'loading'].includes(engine.snapshot().modelStatus)) engine.load();
   };
 
   const startRecording = (withoutTranscription = false) => {
@@ -1724,7 +1724,10 @@ function App() {
                     <LocalTranscription
                       enabled={transcriptionEnabled} setEnabled={changeTranscription} recording={recording}
                       hasMic={recordOptions.mic && recordOptions.micIds.some(id => !isMicUnlockId(id))}
-                      speech={speech} prepare={() => transcriptionRef.current?.load()} unload={() => changeTranscription(false)}
+                      speech={speech} prepare={() => transcriptionRef.current?.load()} unload={() => {
+                        setTranscriptionEnabled(false);
+                        transcriptionRef.current?.unload('Speech model unloaded. Existing text is kept.');
+                      }}
                     />
                   </div>
                 </div>
@@ -1780,12 +1783,12 @@ function App() {
                     : 'Transcription is ready. You can start your recording now.'}</p>
             <div className="speech-actions">
               {speech.canStartCapture && recordOptions.mic && recordOptions.micIds.some(id => !isMicUnlockId(id)) && <button className="btn" onClick={() => { setShowTranscriptionWarning(false); startRecording(); }}>Record with transcription</button>}
-              <button className="speech-button" onClick={() => {
+              <button className="mini-action" onClick={() => {
                 setShowTranscriptionWarning(false);
                 changeTranscription(false);
                 startRecording(true);
               }}>Record without transcription</button>
-              <button className="speech-button" onClick={() => {
+              <button className="mini-action" onClick={() => {
                 setShowTranscriptionWarning(false);
                 if (speech.modelStatus === 'error' || speech.modelStatus === 'unloaded') transcriptionRef.current?.load();
               }}>{speech.modelStatus === 'error' || speech.modelStatus === 'unloaded' ? 'Try again' : 'Back to setup'}</button>
