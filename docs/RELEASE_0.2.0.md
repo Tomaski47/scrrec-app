@@ -1,6 +1,6 @@
 # 0.2.0 — reliability and maintenance
 
-Status: release candidate, September 22, 2026. Deploy after the physical-device acceptance checks below. This change does not itself deploy production or tag a public release.
+Status: release candidate, updated October 21, 2026. Deploy after the physical-device acceptance checks below. This change does not itself deploy production or tag a public release.
 
 October 21 release execution: Vite is updated to 6.4.5 and source-map-js to 1.2.2; unused Tailwind tooling is removed, clearing the nine newly affected development/build packages. The dependency audit again reports zero findings. CSS output is byte-for-byte unchanged. Release acceptance is in progress; see the [current roadmap](KNOWN_ISSUES_AND_FUTURE_WORK.md) and [local transcription proposal](LOCAL_TRANSCRIPTION_ROADMAP.md).
 
@@ -15,6 +15,7 @@ October 21 release execution: Vite is updated to 6.4.5 and source-map-js to 1.2.
 - Video-only MIME choices omit audio codecs, fixing a Firefox finalization stall reproduced during acceptance. The regression is covered in the lifecycle suite and real Firefox encoder checks.
 - Relative nginx directory redirects preserve HTTPS behind a TLS-terminating proxy. Cloudflare-origin HTTP requests redirect to HTTPS, with a one-day HSTS policy. An insecure-page recording error now explains how to open the secure page. These changes fix the HTTP downgrade found during the iPhone/desktop preview check.
 
+- Source rows use plain unchecked backgrounds and a subtle selected accent in both themes. Mobile Safari no longer renders an empty desktop-browser notice.
 - Apple mobile recording prefers native MP4/H.264/AAC video and M4A/AAC audio when supported, with capability-based fallback and actual-container filenames.
 - iPhone and iPad camera choices are exclusive even when Safari exposes real front/rear device IDs. This prevents opening a second camera from muting the first; iPad desktop browsing is included. Desktop multiple-camera selection remains available.
 - File sharing uses container MIME metadata, shows feedback beside the relevant file, and serializes share attempts. Cancellation releases the lock, Save remains available while sharing, and a stalled browser share shows recovery instructions without discarding files.
@@ -32,10 +33,10 @@ October 21 additional checks: physical Mac FaceTime HD camera plus built-in micr
 
 October 21 extended acceptance:
 
-- Chrome native tab capture through `getDisplayMedia` recorded and played to the end (4.56 seconds, 2992×1780). The captured tab contained only generated test content.
+- Chrome native tab capture through `getDisplayMedia` recorded and played to the end (4.56 seconds, 2992×1780). A further real tab + named built-in microphone + FaceTime HD camera recording produced all three files and played each to the end (about 4.8 seconds). Physical media was cleared without downloading; the captured tab contained only generated test content.
 - A concurrent screen, camera, and microphone soak ran for 1,825.6 seconds using synthetic canvas/oscillator sources with native Chrome VP9/Opus encoders. All three downloads succeeded: two 200,090,111-byte videos and one 58,629,060-byte audio file. Every video and audio stream decoded fully with no warnings; browser playback from 1,818 seconds reached the end of all three files. Audio/video end timestamps differed by at most 50 ms within each video; this is a timestamp check, not a perceptual sync measurement.
 - The soak reported no recording errors. Sampled JavaScript heap ranged below 16.1 MB and ended at 7.4 MB. This excludes retained Blob/native media storage: completed files totaled about 437.6 MiB, so recording memory still grows with output size. The soak page was isolated from development-server hot reload; the audio-bearing recorder path was unchanged by subsequent video-only MIME and export UI fixes.
-- Updated Chrome browser checks cover a pending share, download during sharing, a stalled-share message, cancellation, sharing another file, success, and retrying the original file. Shared file MIME metadata excludes codec parameters. A simulated iPad desktop user agent with two real camera IDs confirms selecting one camera replaces the other and produces one output. Physical iPhone confirmation remains required.
+- Updated Chrome browser checks cover a pending share, download during sharing, a stalled-share message, cancellation, sharing another file, success, and retrying the original file. Shared file MIME metadata excludes codec parameters. A simulated iPad desktop user agent with two real camera IDs confirms selecting one camera replaces the other and produces one output. The Apple mobile format path also downloaded and played MP4 video plus M4A audio; independent decoding confirmed H.264 and AAC in the MP4, and AAC in the M4A. This used Chrome encoders under a simulated mobile identity, so physical iPhone export confirmation remains required.
 
 ## Reproduce browser checks
 
@@ -50,7 +51,7 @@ npx --yes --package @playwright/cli playwright-cli -s=release run-code "$(cat sc
 npx --yes --package @playwright/cli playwright-cli -s=release close
 ```
 
-The fixture only accepts localhost URLs. It replaces acquisition in that isolated browser session, uses generated media, and leaves screenshots/downloads local. Do not commit those artifacts. The combination check covers camera plus two microphones, share cancellation/retries/stalls with download fallback, and cancellation before the second screen picker. Run `scripts/browser-mobile-cameras.js` last in the isolated session to check camera selection under a simulated iPad desktop browser identity; this does not emulate Safari encoding or iPhone hardware.
+The fixture only accepts localhost URLs. It replaces acquisition in that isolated browser session, uses generated media, and leaves screenshots/downloads local. Do not commit those artifacts. The combination check covers camera plus two microphones, share cancellation/retries/stalls with download fallback, and cancellation before the second screen picker. Run `scripts/browser-mobile-cameras.js` last in an isolated Chrome session with MP4/AAC encoding support to check camera selection under a simulated iPad desktop browser identity; this does not emulate Safari encoding or iPhone hardware.
 
 ## Deployment acceptance
 

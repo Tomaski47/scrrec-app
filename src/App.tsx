@@ -1092,10 +1092,10 @@ function App() {
 
   // Browser notice component
   const BrowserNotice: React.FC = () => {
-    const { isSafari, isFirefox, isIncognito, isMobileSafari } = getBrowserInfo();
-    
-    // Don't show on mobile unless it's mobile Safari
-    if (isMobile && !isMobileSafari) return null;
+    const { isSafari, isFirefox, isIncognito } = getBrowserInfo();
+
+    // These notices contain desktop advice; mobile Safari otherwise gets an empty box.
+    if (isMobile) return null;
     
     // Only show for desktop Safari, Firefox, or incognito mode
     if (!isSafari && !isFirefox && !isIncognito) return null;

@@ -3174,6 +3174,30 @@ body.light-mode,
 }
 
 /* Functional controls */
+.recorder-panel .option-block,
+.recorder-panel .option-block:hover {
+  background: #1b1c27;
+  border-color: rgba(48, 255, 215, 0.38);
+  box-shadow: none;
+}
+
+.recorder-panel .option-block.has-submenu {
+  background: #192c31;
+  border-color: #30d8c5;
+}
+
+.App.light-mode .recorder-panel .option-block,
+.App.light-mode .recorder-panel .option-block:hover {
+  background: #f7fafc;
+  border-color: #86afb7;
+  box-shadow: none;
+}
+
+.App.light-mode .recorder-panel .option-block.has-submenu {
+  background: #eaf8f6;
+  border-color: #16877d;
+}
+
 .screen-slot-actions {
   display: flex;
   flex-wrap: wrap;
