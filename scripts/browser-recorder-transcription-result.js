@@ -12,7 +12,7 @@ async (page) => {
       return { kind: player.tagName.toLowerCase(), readyState: player.readyState, error: player.error?.message ?? null, width: player.videoWidth ?? null, height: player.videoHeight ?? null };
     }));
     state.sample();
-    (state.draws || []).forEach(clearInterval); await Promise.all(state.contexts.map(context => context.close()));
+    (state.draws || []).forEach(clearInterval); await Promise.all(state.contexts.map(context => context.state === 'closed' ? Promise.resolve() : context.close()));
     return { plannedSeconds: state.plannedSeconds, calls: state.calls.slice(state.startCalls), allTracksEnded: state.tracks.every(track => track.readyState === 'ended'),
       samples: state.samples, windows: state.resultCount, lastResults: state.results, frames: state.frames,
       transcript: { words: session.text.trim().split(/\s+/).length, blocks: session.blocks.length, start: session.blocks[0]?.start, end: session.blocks.at(-1)?.end, finished: session.finished, incomplete: session.incomplete, stats: session.stats, textStart: session.text.slice(0,150), textEnd: session.text.slice(-220) }, media };
@@ -23,7 +23,7 @@ async (page) => {
   await (await evidenceDownload).saveAs('output/transcription-benchmark/integrated-long-measurements.json');
   for (let index = 0; index < 3; index++) {
     const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Save', exact: true }).nth(index).click();
+    await page.locator('.recording-card').nth(index).getByRole('button', { name: /^(Save|Download again)$/, exact: true }).click();
     const file = await download;
     await file.saveAs(`output/transcription-benchmark/integrated-long-${index}.${file.suggestedFilename().split('.').at(-1)}`);
   }
