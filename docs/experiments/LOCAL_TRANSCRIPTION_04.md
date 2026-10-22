@@ -36,7 +36,7 @@ There is no fixed live duration cutoff, but this is **not unlimited storage**: t
 
 [Recorder transcription preview 4](https://screc.sadilekinnovation.com/recorder-preview/local-4-05490ea/) runs feature source `05490ea`. Normal recorder controls include the optional transcription panel; there is no separate lab workflow to learn. This temporary preview may need republishing after a production container replacement.
 
-The generated deployment bundle is ready locally. GitHub push protection misclassifies the dependency's public `Mistral3ForConditionalGeneration` model-class registration as a Mistral key. The source/tests are published in draft PR #10; publishing the tracked vendor bundle awaits explicit authorization for that specific false-positive finding. Repository protection remains enabled.
+The rebuilt deployment bundle is included in draft PR #10. GitHub's finding for the dependency's public `Mistral3ForConditionalGeneration` model-class registration was reviewed and explicitly approved as a false positive; it is not a credential. Repository push protection remains enabled.
 
 ## Reproduce browser checks
 
