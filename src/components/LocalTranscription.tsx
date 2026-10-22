@@ -21,22 +21,32 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
       setCacheMessage(`Removed ${removed} cached model files. Browser runtime caching is separate.`);
     } catch { setCacheMessage('Could not remove cached models in this browser.'); }
   };
-  return <section className="local-transcription" aria-labelledby="speech-heading">
-    <label className="speech-toggle"><input type="checkbox" checked={enabled} disabled={recording} onChange={event => setEnabled(event.target.checked)} />
-      <span id="speech-heading">Local transcription <small>Optional · English · Beta</small></span>
-    </label>
-    {enabled && <div className="speech-setup">
-      <p>Get a transcript alongside your recording using the selected microphone{hasMic ? '' : ' — select Mic above'}. Audio and text stay on this device. Keep this tab open and in the foreground.</p>
-      <p>Tiny speech model · about 60 MB on first preparation, downloaded from Hugging Face and cached when available. Recording works independently.</p>
-      <div className="speech-actions">
-        <button className="speech-button" disabled={recording || speech.modelStatus === 'loading' || speech.modelStatus === 'ready'} onClick={prepare}>{speech.modelStatus === 'loading' ? 'Preparing…' : speech.modelStatus === 'ready' ? 'Model ready' : 'Prepare local transcription'}</button>
-        {(speech.modelStatus === 'ready' || speech.modelStatus === 'loading') && <button className="speech-button" onClick={unload}>{recording ? 'Stop transcription' : 'Unload model'}</button>}
-        {!recording && speech.modelStatus !== 'ready' && speech.modelStatus !== 'loading' && <button className="speech-button" onClick={() => void removeCache()}>Remove cached models</button>}
-      </div>
-      <p className="speech-status" role="status">{speech.message}{cacheMessage && ` ${cacheMessage}`}</p>
-      <p className="speech-footnote">Review names and important details. Save recordings and transcripts before closing this tab. <a href={`${import.meta.env.BASE_URL}licenses/README.txt`} target="_blank" rel="noreferrer">Speech engine notices</a></p>
-    </div>}
-  </section>;
+  return <div className="transcription-control">
+    <section className={`option-block transcription-option${enabled ? ' has-submenu' : ''}`} aria-labelledby="speech-heading">
+      <label className="options-checkbox"><input className="styled-checkbox" type="checkbox" checked={enabled} disabled={recording} onChange={event => setEnabled(event.target.checked)} />
+        <span id="speech-heading">Local transcription</span>
+      </label>
+      {enabled && <div className="device-submenu speech-setup">
+        <p className="speech-footnote">Optional · English · Beta</p>
+        <p>Audio and text stay on your device. Keep this tab open and in the foreground.</p>
+        {!hasMic && <p className="speech-hint">Select Mic above for transcription.</p>}
+        <p>About 60 MB on first use. The speech model comes from Hugging Face and is cached when available.</p>
+        <div className="speech-actions">
+          {(speech.modelStatus === 'loading' || speech.modelStatus === 'ready')
+            ? <span className="speech-readiness">{speech.modelStatus === 'loading' ? 'Preparing transcription…' : 'Ready to transcribe'}</span>
+            : <button className="speech-button" disabled={recording} onClick={prepare}>Retry preparation</button>}
+          <button className="speech-button" onClick={unload}>{recording ? 'Stop transcription' : speech.modelStatus === 'loading' ? 'Cancel preparation' : 'Turn off'}</button>
+        </div>
+        <p className={`speech-status${speech.modelStatus === 'error' ? ' speech-warning' : ''}`} role={speech.modelStatus === 'error' ? 'alert' : 'status'}>{speech.message}</p>
+        <p className="speech-footnote">Review names and important details. Save recordings and transcripts before closing this tab. <a href={`${import.meta.env.BASE_URL}licenses/README.txt`} target="_blank" rel="noreferrer">Speech engine notices</a></p>
+      </div>}
+    </section>
+    {!enabled && !recording && <details className="speech-storage">
+      <summary>Model storage</summary>
+      <button className="speech-button" onClick={() => void removeCache()}>Remove cached models</button>
+    </details>}
+    {cacheMessage && <p className="speech-footnote" role="status">{cacheMessage}</p>}
+  </div>;
 }
 
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;

@@ -11,7 +11,7 @@ export interface SpeechSession {
 }
 export interface SpeechSnapshot {
   modelStatus: 'unloaded' | 'loading' | 'ready' | 'error'; message: string;
-  queueDepth: number; sessions: SpeechSession[];
+  canStartCapture: boolean; queueDepth: number; sessions: SpeechSession[];
 }
 interface EngineWorker {
   onmessage: ((event: MessageEvent<Response>) => void) | null;
@@ -26,7 +26,7 @@ interface Options {
 interface Job extends Segment { sessionId: string }
 interface Entry { view: SpeechSession; assembler: TranscriptAssembler; pending: number; ended: boolean; activated: boolean }
 
-export const emptySpeech: SpeechSnapshot = { modelStatus: 'unloaded', message: '', queueDepth: 0, sessions: [] };
+export const emptySpeech: SpeechSnapshot = { modelStatus: 'unloaded', message: '', canStartCapture: false, queueDepth: 0, sessions: [] };
 export const sessionText = (session: SpeechSession) => (session.blocks.map(block => block.text).join('') + session.draft).trim();
 
 /** The optional engine owns its worker and PCM tap, never recording tracks. */
@@ -51,6 +51,7 @@ export class TranscriptionController {
   }
   snapshot(): SpeechSnapshot {
     return { modelStatus: this.status, message: this.message, queueDepth: this.queue?.depth ?? 0,
+      canStartCapture: this.status === 'ready' && !this.active && (!!this.queue?.accepting || !this.queue?.depth),
       sessions: [...this.entries.values()].map(({ view, assembler }) => ({ ...view, stats: { ...view.stats }, blocks: [...assembler.blocks], draft: assembler.draftText })) };
   }
   private publish() { const state = this.snapshot(); this.listeners.forEach(listener => listener(state)); }
@@ -66,7 +67,7 @@ export class TranscriptionController {
   }
   load(model: Model = 'tiny', device: Device = 'wasm') {
     this.unload(); this.model = model; this.device = device;
-    this.status = 'loading'; this.message = 'Preparing the local speech model. The first download is about 60 MB for Tiny…';
+    this.status = 'loading'; this.message = 'Preparing transcription…';
     try {
       const worker = this.worker = this.options.worker?.() ?? new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
       this.makeQueue();
@@ -74,7 +75,7 @@ export class TranscriptionController {
       worker.onerror = event => { if (this.worker === worker) this.fail(event.message || 'Speech engine failed.'); };
       worker.onmessage = ({ data }) => {
         if (this.worker !== worker) return;
-        if (data.type === 'progress') this.message = `Preparing local speech model · ${data.file} · ${(data.loaded / 1_000_000).toFixed(1)} MB read`;
+        if (data.type === 'progress') this.message = 'Preparing transcription. Downloaded files will be reused when available.';
         else if (data.type === 'ready') {
           clearTimeout(this.timeout); this.status = 'ready'; this.message = 'Ready · speech is processed on this device.';
         } else if (data.type === 'error') { this.fail(data.message); return; }
@@ -124,7 +125,7 @@ export class TranscriptionController {
         failure: message => { if (this.active?.id === id) this.stopTap(message); },
       };
       const tap = this.options.tap?.(callbacks) ?? new MicrophoneTap(callbacks);
-      this.active = { id, tap }; this.publish();
+      this.active = { id, tap }; this.message = 'Transcription will start with your recording.'; this.publish();
       let finished = false;
       return {
         attach: streams => tap.attach(streams), activate: () => this.activateCapture(), abort: () => this.stopTap('Transcription stopped; recording continues.'),

@@ -1,7 +1,7 @@
 async (page) => {
   if (!/^http:\/\/(127\.0\.0\.1|localhost):/.test(page.url())) throw new Error('Generated media is localhost-only.');
   const plannedSeconds = await page.evaluate(() => window.recorderTest.duration || 1805);
-  await page.getByRole('button', { name: 'Model ready', exact: true }).waitFor({ timeout: 120000 });
+  await page.getByText('Ready to transcribe', { exact: true }).waitFor({ timeout: 120000 });
   await page.getByRole('checkbox', { name: 'Mic', exact: true }).check();
   await page.getByRole('combobox', { name: 'Microphone quality', exact: true }).selectOption('low');
   await page.getByRole('checkbox', { name: 'Camera', exact: true }).check();

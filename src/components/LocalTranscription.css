@@ -1,17 +1,25 @@
 .local-transcription { margin: 1.5rem 0; padding: 1.25rem; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 14px; text-align: left; }
-.speech-toggle { display: flex; align-items: center; gap: .8rem; min-height: 44px; cursor: pointer; background: none; }
-.speech-toggle input { width: 21px; height: 21px; accent-color: #13cbb4; flex-shrink: 0; }
-.speech-toggle span { font-size: 1.05rem; font-weight: 650; }
-.speech-toggle small { display: block; font-size: .8rem; font-weight: 400; opacity: .7; margin-top: .25rem; }
+.transcription-control { width: 100%; text-align: left; }
 .speech-setup p, .transcript-card > p { font-size: .9rem; line-height: 1.6; margin: .8rem 0; }
 .speech-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
 .speech-button { min-height: 44px; padding: .6rem .9rem; border-radius: 8px; background: transparent; color: inherit; border: 1px solid #268b8c; cursor: pointer; font: inherit; font-size: .9rem; }
 .speech-button:hover:not(:disabled) { background: #13cbb41a; }
-.speech-button:focus-visible, .speech-toggle input:focus-visible { outline: 3px solid #13cbb4; outline-offset: 3px; }
+.speech-button:focus-visible, .transcription-option input:focus-visible { outline: 3px solid #13cbb4; outline-offset: 3px; }
 .speech-button:disabled { opacity: .5; cursor: default; }
 .speech-footnote { opacity: .7; }
-.local-transcription a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.local-transcription a, .speech-setup a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .speech-status { color: inherit; }
+.speech-hint, .speech-warning { border-left: 2px solid #c99e54; padding-left: .75rem; }
+.speech-readiness { display: inline-flex; align-items: center; min-height: 44px; font-size: .9rem; }
+.speech-storage { font-size: .85rem; margin: .5rem 16px 0; }
+.speech-storage > summary { cursor: pointer; padding: .5rem 0; min-height: 44px; box-sizing: border-box; }
+.speech-storage .speech-button { margin-top: .5rem; }
+.session-retention { font-size: .85rem; opacity: .7; }
+.session-result-heading { font-size: 1rem; text-align: left; margin-top: 1.5rem; }
+.session-history { margin: 1.5rem 0; text-align: left; border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent); padding-top: .5rem; }
+.session-history > summary { padding: .85rem .25rem; cursor: pointer; font-weight: 600; }
+.session-history > summary:focus-visible { outline: 3px solid #13cbb4; outline-offset: 3px; }
+.session-history .session-result { border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent); margin-top: 1rem; }
 .speech-title { display: flex; gap: 1rem; justify-content: space-between; align-items: baseline; }
 .speech-title h3 { margin: 0; }
 .speech-title > span { font-size: .8rem; color: #14b8a6; }

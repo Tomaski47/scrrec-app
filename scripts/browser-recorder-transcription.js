@@ -12,8 +12,8 @@ async (page) => {
     };
     const post = Worker.prototype.postMessage;
     Worker.prototype.postMessage = function(message, ...rest) {
-      if (!state.worker && message.type === 'load') {
-        state.worker = this;
+      if (message.type === 'load') {
+        state.worker = this; state.loads = (state.loads || 0) + 1;
         this.addEventListener('message', ({ data }) => { if (data.type === 'result') {
           state.resultCount = (state.resultCount || 0) + 1;
           // Keep diagnostics bounded; no PCM or complete window history retained.
@@ -55,7 +55,7 @@ async (page) => {
       state.draws = [...(state.draws || []), draw];
       return stream;
     }
-    navigator.mediaDevices.getDisplayMedia = async () => { state.calls.push({ type: 'display', at: performance.now() }); return video(); };
+    navigator.mediaDevices.getDisplayMedia = async () => { state.calls.push({ type: 'display', at: performance.now(), userActivation: navigator.userActivation.isActive }); return video(); };
   });
   const target = page.url().startsWith('http://') ? new URL(page.url()).origin : 'http://127.0.0.1:5190';
   await page.goto(target);

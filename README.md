@@ -83,7 +83,7 @@ npm run check
 
 See [Release 0.2.0](docs/RELEASE_0.2.0.md) for browser checks and the deployment checklist.
 
-The main recorder includes an optional English local-transcription beta. Select Mic, enable Local transcription, choose Prepare local transcription, and wait for Model ready before recording. Nothing from the speech engine downloads until preparation. Tiny runs on the device using the selected microphone streams; transcription errors or cancellation do not stop recording. Each recording session has a transcript with copy, TXT and JSON export.
+The main recorder includes an optional English local-transcription beta. Select Mic, enable Local transcription, and wait for Ready to transcribe before recording. Enabling the option automatically prepares the model; the speech engine downloads nothing while the option is off. If it is not ready, Start Recording asks you to wait, retry, or explicitly record without transcription. Tiny runs on the device using the selected microphone streams; transcription errors or cancellation do not stop recording. Each recording session has a transcript with copy, TXT and JSON export. Starting another recording collapses earlier results into Previous sessions without deleting them; use Clear All to remove them explicitly.
 
 Live transcription has no fixed time cutoff. PCM, queued jobs and the revisable text remain bounded; saved transcript text and encoded recordings still grow in tab memory. Keep the tab open and in the foreground, and save regularly. This does not promise unlimited phone endurance or offline startup. See [integration and validation](docs/experiments/LOCAL_TRANSCRIPTION_04.md).
 

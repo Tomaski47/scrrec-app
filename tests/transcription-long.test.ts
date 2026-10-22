@@ -91,12 +91,16 @@ test('late results belong to their recording session; cancelled acquisition leav
 test('overload ends only the optional tap, drains accepted words and allows the next recording', async () => {
   const { controller, worker, taps } = setup();
   try {
+    assert.equal(controller.snapshot().canStartCapture, true);
     const first = controller.beginCapture('first', 'mic')!; controller.activateCapture();
+    assert.equal(controller.snapshot().canStartCapture, false);
     for (let id = 1; id <= 4; id++) taps[0].emit(id);
     assert.equal(controller.snapshot().queueDepth, 3); assert.ok(taps[0].aborted);
+    assert.equal(controller.snapshot().canStartCapture, false);
     worker.result('one'); worker.result('two'); worker.result('three'); await first.finish();
     const session = controller.snapshot().sessions[0];
     assert.ok(session.incomplete); assert.equal(sessionText(session), 'one\n\ntwo\n\nthree'); assert.ok(session.finished);
+    assert.equal(controller.snapshot().canStartCapture, true);
     assert.ok(controller.beginCapture('next', 'mic'));
   } finally { controller.dispose(); }
 });

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CompletedRecording } from '../recorder/session';
+import type { SpeechSession } from '../transcription/controller';
+import { SessionTranscripts } from './LocalTranscription';
 
 type Sharing = { active: string | null; begin: (id: string) => boolean; finish: () => void };
 
@@ -66,7 +68,7 @@ function RecordingCard({ recording, sharing }: { recording: CompletedRecording; 
   );
 }
 
-export function RecordingList({ recordings, transcriptIds = [] }: { recordings: CompletedRecording[]; transcriptIds?: string[] }) {
+export function SessionResults({ recordings, transcripts, currentSessionId, recording }: { recordings: CompletedRecording[]; transcripts: SpeechSession[]; currentSessionId: string | null; recording: boolean }) {
   const lock = useRef(false);
   const [active, setActive] = useState<string | null>(null);
   const sharing: Sharing = {
@@ -80,14 +82,38 @@ export function RecordingList({ recordings, transcriptIds = [] }: { recordings: 
     },
     finish: () => { lock.current = false; setActive(null); },
   };
-  if (!recordings.length) return null;
-  return <section className="recording-library" aria-label="Completed recordings">
-    <h2>Recordings</h2>
-    <p>Files stay here for this tab session. Save them before closing or reloading the page.</p>
-    {active !== null && !recordings.some(recording => recording.id === active) && <p role="status" className="save-feedback">Your browser still has a share pending. Use Save for these files. Save all recordings before reloading this tab.</p>}
-    {recordings.map(recording => <div key={recording.id}>
-      {transcriptIds.includes(recording.sessionId) && <a href={`#transcript-${recording.sessionId}`}>View session transcript</a>}
-      <RecordingCard recording={recording} sharing={sharing} />
-    </div>)}
+  // One share lock covers current and previous sessions, including hidden rows.
+  const groups = new Map<string, { id: string; date: number; recordings: CompletedRecording[]; transcripts: SpeechSession[] }>();
+  const group = (id: string, date: number) => {
+    let entry = groups.get(id);
+    if (!entry) { entry = { id, date, recordings: [], transcripts: [] }; groups.set(id, entry); }
+    return entry;
+  };
+  recordings.forEach(file => group(file.sessionId, file.createdAt.getTime()).recordings.push(file));
+  transcripts.forEach(text => group(text.id, Date.parse(text.createdAt)).transcripts.push(text));
+  const sorted = [...groups.values()].sort((a, b) => b.date - a.date);
+  // A cancelled/failed acquisition restores the last available session.
+  const current = groups.get(currentSessionId ?? '') ?? (!recording ? sorted[0] : undefined);
+  const previous = sorted.filter(entry => entry !== current);
+  const render = (entry: typeof sorted[number], focused: boolean) => <section key={entry.id} className="session-result" aria-label={focused ? 'Current session' : `Session from ${new Date(entry.date).toLocaleString()}`}>
+    <h2 className="session-result-heading">{focused ? 'Current session' : new Date(entry.date).toLocaleString()}</h2>
+    <SessionTranscripts sessions={entry.transcripts} />
+    {entry.recordings.length > 0 && <div className="recording-library" aria-label="Completed recordings">
+      <h3>Recordings</h3>
+      {entry.recordings.map(file => <div key={file.id}>
+        {entry.transcripts.length > 0 && <a href={`#transcript-${file.sessionId}`}>View session transcript</a>}
+        <RecordingCard recording={file} sharing={sharing} />
+      </div>)}
+    </div>}
+  </section>;
+  if (!groups.size) return null;
+  return <section className="session-results" aria-label="Recordings and transcripts">
+    <p className="session-retention">Kept in this tab until you clear or close it. Save anything you want to keep.</p>
+    {active !== null && !recordings.some(file => file.id === active) && <p role="status" className="save-feedback">Your browser still has a share pending. Use Save for these files. Save all recordings before reloading this tab.</p>}
+    {current && render(current, true)}
+    {previous.length > 0 && <details className="session-history" key={`history-${current?.id ?? currentSessionId}`}>
+      <summary>Previous sessions ({previous.length})</summary>
+      {previous.map(entry => render(entry, false))}
+    </details>}
   </section>;
 }

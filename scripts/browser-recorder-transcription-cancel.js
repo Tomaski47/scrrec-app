@@ -1,9 +1,9 @@
 async (page) => {
   if (!/^http:\/\/(127\.0\.0\.1|localhost):/.test(page.url())) throw new Error('Generated media is localhost-only.');
+  await page.unroute('**/worker-*.js');
   page.once('dialog', dialog => dialog.accept()); await page.reload();
-  await page.getByRole('checkbox', { name: 'Local transcription Optional' }).check();
-  await page.getByRole('button', { name: 'Prepare local transcription' }).click();
-  await page.getByRole('button', { name: 'Model ready', exact: true }).waitFor({ timeout: 60000 });
+  await page.getByRole('checkbox', { name: 'Local transcription' }).check();
+  await page.getByText('Ready to transcribe', { exact: true }).waitFor({ timeout: 60000 });
   await page.getByRole('checkbox', { name: 'Mic', exact: true }).check();
   await page.getByRole('checkbox', { name: 'Camera', exact: true }).check();
   await page.getByRole('checkbox', { name: 'Screen', exact: true }).check();
@@ -28,7 +28,7 @@ async (page) => {
     (state.draws||[]).forEach(clearInterval); await Promise.all(state.contexts.map(context=>context.state==='closed'?Promise.resolve():context.close()));
     return { media, calls:state.calls, allTracksEnded:state.tracks.every(track=>track.readyState==='ended'), transcriptStates:[...document.querySelectorAll('.speech-title > span')].map(node=>node.textContent), transcriptLinks:[...document.querySelectorAll('.recording-library a')].map(link=>link.hash), speechAssets:performance.getEntriesByType('resource').filter(entry=>/worker-|capture.worklet|transformers/.test(entry.name)).map(entry=>entry.name) };
   });
-  if (result.transcriptStates.join(',') !== 'Finished,Incomplete' || new Set(result.transcriptLinks).size !== 2 || !result.allTracksEnded || result.media.some(file=>file.error)) throw new Error(JSON.stringify(result));
+  if (result.transcriptStates.join(',') !== 'Incomplete,Finished' || new Set(result.transcriptLinks).size !== 2 || !result.allTracksEnded || result.media.some(file=>file.error)) throw new Error(JSON.stringify(result));
   const report = page.waitForEvent('download');
   await page.evaluate(result=>{const url=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='integrated-cancellation.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},result);
   await (await report).saveAs('output/transcription-benchmark/integrated-cancellation.json');

@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { RecordingSession, AUDIO_BITRATES, type AudioQuality, type CompletedRecording, type SessionState, type Acquisition, type RecordingSource } from './recorder/session';
 import { Modal } from './components/Modal';
-import { RecordingList } from './components/RecordingList';
-import { LocalTranscription, SessionTranscripts } from './components/LocalTranscription';
+import { SessionResults } from './components/SessionResults';
+import { LocalTranscription } from './components/LocalTranscription';
 import { useLocalTranscription } from './transcription/useLocalTranscription';
 import { genericFrontCameraId, genericRearCameraId, genericCameraId, isGenericCameraId, isAppleMobile, requiresSingleCamera, nextCameraIds, cameraChoiceLabels, cameraDescription } from './recorder/cameras';
 
@@ -488,6 +488,8 @@ function App() {
   const recording = sessionState !== 'idle'; // Lock every source control during acquisition/finalization too.
   const [transcriptionEnabled, setTranscriptionEnabled] = useState(false);
   const { controller: transcriptionRef, speech } = useLocalTranscription();
+  const [showTranscriptionWarning, setShowTranscriptionWarning] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [recordings, setRecordings] = useState<CompletedRecording[]>([]);
   const [screenPrompt, setScreenPrompt] = useState<{ label: string; choose: () => void; cancel: () => void } | null>(null);
   const sessionRef = useRef<RecordingSession | null>(null);
@@ -1007,7 +1009,14 @@ function App() {
     } });
   });
 
-  const startRecording = () => {
+  const changeTranscription = (enabled: boolean) => {
+    setTranscriptionEnabled(enabled);
+    const engine = transcriptionRef.current;
+    if (!enabled) engine?.unload('Transcription turned off. Existing text is kept. Recording continues if active.');
+    else if (engine && !['ready', 'loading'].includes(engine.snapshot().modelStatus)) engine.load();
+  };
+
+  const startRecording = (withoutTranscription = false) => {
     const session = sessionRef.current;
     if (!session || session.state !== 'idle' || deviceOperationsRef.current > 0) return;
     if (!window.isSecureContext) {
@@ -1023,9 +1032,14 @@ function App() {
       setPermissionError('Choose at least one recording source.');
       return;
     }
+    if (transcriptionEnabled && !withoutTranscription && (!micIds.length || !transcriptionRef.current?.snapshot().canStartCapture)) {
+      setShowTranscriptionWarning(true);
+      return;
+    }
     stopMicMeter();
     void session.start(async owner => {
-      const transcription = transcriptionEnabled && micIds.length
+      setCurrentSessionId(owner.sessionId);
+      const transcription = transcriptionEnabled && !withoutTranscription && micIds.length
         ? transcriptionRef.current?.beginCapture(owner.sessionId, micIds.map(id => micDevices.find(device => device.deviceId === id)?.label || 'Microphone').join(' + ')) : undefined;
       if (transcription) owner.ownCleanup(() => transcription.finish());
       const sources: RecordingSource[] = [];
@@ -1096,6 +1110,8 @@ function App() {
   const confirmClear = () => {
     sessionRef.current?.clear();
     transcriptionRef.current?.clear();
+    setTranscriptionEnabled(false);
+    setCurrentSessionId(null);
     setShowClearConfirmation(false);
   };
 
@@ -1705,17 +1721,20 @@ function App() {
                         </div>
                       )}
                     </div>
+                    <LocalTranscription
+                      enabled={transcriptionEnabled} setEnabled={changeTranscription} recording={recording}
+                      hasMic={recordOptions.mic && recordOptions.micIds.some(id => !isMicUnlockId(id))}
+                      speech={speech} prepare={() => transcriptionRef.current?.load()} unload={() => changeTranscription(false)}
+                    />
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <p className="capture-note">Screen and camera save as separate videos with your selected microphone audio. Tab/system audio is not captured.</p>
-          <LocalTranscription enabled={transcriptionEnabled} setEnabled={setTranscriptionEnabled} recording={recording} hasMic={recordOptions.mic && recordOptions.micIds.length > 0} speech={speech} prepare={() => transcriptionRef.current?.load()} unload={() => transcriptionRef.current?.unload()} />
           <div className="action-buttons">
             {!window.isSecureContext && window.location.protocol === 'http:' && <p role="alert">Recording requires HTTPS. <a href={window.location.href.replace(/^http:/, 'https:')}>Open the secure page</a>.</p>}
-            <button className="btn" onClick={startRecording} disabled={recording || deviceBusy}>Start Recording</button>
+            <button className="btn" onClick={() => startRecording()} disabled={recording || deviceBusy}>Start Recording</button>
             <button className={recording ? 'neon-stop' : 'btn-disabled'} onClick={stopRecording} disabled={!recording || sessionState === 'stopping'}>
               {sessionState === 'acquiring' ? 'Cancel capture' : 'Stop Recording'}
             </button>
@@ -1733,8 +1752,7 @@ function App() {
               {recordingSize > 500 * 1024 ** 2 && ' — Large recording. Stop and save soon to reduce memory pressure.'}
             </div>
           </>}
-          <SessionTranscripts sessions={speech.sessions} />
-          <RecordingList recordings={recordings} transcriptIds={speech.sessions.map(session => session.id)} />
+          <SessionResults recordings={recordings} transcripts={speech.sessions} currentSessionId={currentSessionId} recording={recording} />
           {(recordings.length > 0 || speech.sessions.length > 0) && <button className="clear-button" disabled={recording || deviceBusy} onClick={() => setShowClearConfirmation(true)}>Clear All</button>}
           {showClearConfirmation && <Modal title="Clear recordings and transcripts?" onDismiss={() => setShowClearConfirmation(false)}>
             <p>This deletes all recordings and transcripts in this tab and unloads the speech model. Check that any files and text you need have finished downloading first.</p>
@@ -1747,6 +1765,31 @@ function App() {
             <p>Your earlier sources are ready. Choose the next screen to continue.</p>
             <button className="btn" onClick={screenPrompt.choose}>Choose {screenPrompt.label}</button>
             <button className="footer-button footer-link" onClick={screenPrompt.cancel}>Cancel capture</button>
+          </Modal>}
+          {showTranscriptionWarning && <Modal title="Before you record" onDismiss={() => setShowTranscriptionWarning(false)}>
+            <p>{!recordOptions.mic || !recordOptions.micIds.some(id => !isMicUnlockId(id))
+              ? 'Transcription needs a microphone. Select Mic above, or record without transcription.'
+              : speech.modelStatus === 'loading'
+                ? 'Transcription is still preparing. Wait until it is ready, or record without transcription.'
+                : speech.modelStatus === 'error'
+                  ? 'The speech model could not load. Try preparing it again, or record without transcription.'
+                  : speech.modelStatus === 'unloaded'
+                    ? 'Transcription needs to be prepared before recording. Try again, or record without transcription.'
+                  : !speech.canStartCapture
+                    ? 'Transcription is not ready yet. Wait for the previous transcript to finish, or record without transcription.'
+                    : 'Transcription is ready. You can start your recording now.'}</p>
+            <div className="speech-actions">
+              {speech.canStartCapture && recordOptions.mic && recordOptions.micIds.some(id => !isMicUnlockId(id)) && <button className="btn" onClick={() => { setShowTranscriptionWarning(false); startRecording(); }}>Record with transcription</button>}
+              <button className="speech-button" onClick={() => {
+                setShowTranscriptionWarning(false);
+                changeTranscription(false);
+                startRecording(true);
+              }}>Record without transcription</button>
+              <button className="speech-button" onClick={() => {
+                setShowTranscriptionWarning(false);
+                if (speech.modelStatus === 'error' || speech.modelStatus === 'unloaded') transcriptionRef.current?.load();
+              }}>{speech.modelStatus === 'error' || speech.modelStatus === 'unloaded' ? 'Try again' : 'Back to setup'}</button>
+            </div>
           </Modal>}
           {permissionError && <Modal title="Recording notice" onDismiss={() => setPermissionError(null)}>
             <p style={{ whiteSpace: 'pre-line' }}>{permissionError}</p>
