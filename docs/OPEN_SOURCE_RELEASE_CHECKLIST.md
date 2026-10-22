@@ -1,6 +1,6 @@
 # Open Source Release Checklist
 
-Use this checklist before marking the project ready for a public open-source release.
+This is the initial OSS release checklist. For the current reliability release, use the [0.2.0 deployment acceptance checklist](RELEASE_0.2.0.md).
 
 ## Repo Basics
 
@@ -21,7 +21,7 @@ Use this checklist before marking the project ready for a public open-source rel
 
 ## Functional Smoke Test
 
-- [ ] Run `npm install` from a clean checkout.
+- [ ] Run `npm ci` on Node 24 from a clean checkout.
 - [x] Run `npm run build`.
 - [x] Run `npm run lint`.
 - [ ] Test desktop screen recording.

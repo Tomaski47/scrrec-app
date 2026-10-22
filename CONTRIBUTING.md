@@ -5,7 +5,8 @@ Thanks for helping improve Screen Recorder.
 ## Local Setup
 
 ```bash
-npm install
+nvm use
+npm ci
 npm run dev
 ```
 
@@ -24,9 +25,11 @@ The local app currently runs on port `5174` by default. Use `npm run dev:5174` f
 Run:
 
 ```bash
-npm run build
-npm run lint
+npm run check
+npm audit --audit-level=high
 ```
+
+Use Node.js 24 LTS. Recorder lifecycle changes should have regression coverage in `tests/session.test.ts`; browser integration checks are documented in [Release 0.2.0](docs/RELEASE_0.2.0.md). CI runs the checks and builds/smoke-tests the production container.
 
 If app source changes affect the shipped UI, rebuild and include the updated `dist` assets because this repo currently tracks the static bundle for deployment.
 

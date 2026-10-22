@@ -12,7 +12,9 @@ Screen Recorder is a Sadilek Innovation project built from a Bolt DIY start, ref
 - Tune microphone gain with live dBFS peak metering.
 - Toggle browser audio processing options: noise suppression, echo cancellation, and auto gain.
 - Keep capture local to the browser session; there is no account flow and no upload pipeline.
-- Save or share generated recordings from the device running the app.
+- Keep completed recordings available across subsequent recording attempts until explicitly cleared or the tab closes.
+- Save or share generated recordings using the format actually produced by the browser.
+- Mix selected microphones into each video while retaining separate microphone files. System/tab audio is not captured.
 
 ## Privacy Model
 
@@ -31,10 +33,10 @@ Browser and operating-system permissions still matter. The app can only use scre
 
 ## Getting Started
 
-Install dependencies:
+Use Node.js 24 LTS (`nvm use` reads `.nvmrc`), then install the locked dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
 Run the local dev server:
@@ -73,11 +75,13 @@ Preview the production build:
 npm run preview
 ```
 
-Run linting:
+Run linting, the recorder lifecycle regression tests, type checking, and a production build:
 
 ```bash
-npm run lint
+npm run check
 ```
+
+See [Release 0.2.0](docs/RELEASE_0.2.0.md) for browser checks and the deployment checklist.
 
 ## Deployment
 
@@ -86,9 +90,11 @@ The app builds to `dist/`. This repository currently tracks the generated `dist`
 Docker deployment is also supported:
 
 ```bash
-docker build -t screen-recorder .
+docker build --build-arg BUILD_REVISION="$(git rev-parse HEAD)" -t screen-recorder .
 docker run --rm -p 8080:80 screen-recorder
 ```
+
+The image includes `/healthz` and `/version.json` endpoints. HTML and release metadata revalidate; fingerprinted assets receive long cache lifetimes. Security headers include a report-only CSP pending production validation.
 
 Then open:
 
@@ -105,7 +111,9 @@ http://localhost:8080/
 
 ## Project Docs
 
+- [Release 0.2.0](docs/RELEASE_0.2.0.md)
 - [Known Issues and Future Work](docs/KNOWN_ISSUES_AND_FUTURE_WORK.md)
+- [Local Transcription and Live Assistance Roadmap](docs/LOCAL_TRANSCRIPTION_ROADMAP.md)
 - [Open Source Release Checklist](docs/OPEN_SOURCE_RELEASE_CHECKLIST.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)

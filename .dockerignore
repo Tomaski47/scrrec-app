@@ -27,6 +27,9 @@ __tests__/
 
 # Ignore saved media recordings
 recordings/
+output/
+portfolio-cockpit/
+.playwright-cli/
 *.webm
 *.mp4
 *.mov

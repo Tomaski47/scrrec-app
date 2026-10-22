@@ -1,0 +1,44 @@
+name: Check
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm audit --audit-level=high
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: screen-recorder-${{ github.sha }}
+          path: dist/
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker build --build-arg BUILD_REVISION=${{ github.sha }} -t screen-recorder:check .
+      - run: |
+          docker run --rm -d --name screen-recorder-check -p 8080:80 screen-recorder:check
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://localhost:8080/healthz; then break; fi
+            sleep 1
+          done
+          curl --fail http://localhost:8080/version.json
+          curl --fail --silent -D /tmp/headers http://localhost:8080/favicon.svg -o /dev/null
+          grep -qi 'x-content-type-options: nosniff' /tmp/headers
+          test "$(curl --silent -o /dev/null -w '%{http_code}' http://localhost:8080/missing.js)" = 404
+          curl --silent -D /tmp/redirect http://localhost:8080/og -o /dev/null
+          grep -qi 'location: /og/' /tmp/redirect
+          test "$(curl --silent -H 'CF-Visitor: {"scheme":"http"}' -o /dev/null -w '%{http_code}' http://localhost:8080/)" = 308
+      - if: always()
+        run: docker rm -f screen-recorder-check || true
