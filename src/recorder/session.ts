@@ -40,6 +40,7 @@ interface Platform {
   revokeURL: (url: string) => void;
   now: () => number;
   stopTimeoutMs: number;
+  preferMP4: boolean;
 }
 
 interface Entry {
@@ -66,13 +67,18 @@ interface Run {
   resolve: () => void;
 }
 
-export function recorderOptions(hasVideo: boolean, hasAudio: boolean, quality: AudioQuality, supports: Platform['supports']): MediaRecorderOptions {
-  const candidates = hasVideo
+export function recorderOptions(hasVideo: boolean, hasAudio: boolean, quality: AudioQuality, supports: Platform['supports'], preferMP4 = false): MediaRecorderOptions {
+  const webFormats = hasVideo
     ? hasAudio
       ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
       : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']
     : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/aac'];
-  const mimeType = candidates.find(supports);
+  // iOS may encode WebM for in-tab playback even when native Photos/Files
+  // cannot open or share that video. Prefer H.264/AAC on Apple mobile devices.
+  const nativeFormats = hasVideo
+    ? [hasAudio ? 'video/mp4;codecs=avc1,mp4a.40.2' : 'video/mp4;codecs=avc1', 'video/mp4']
+    : ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4'];
+  const mimeType = (preferMP4 ? [...nativeFormats, ...webFormats] : webFormats).find(supports);
   // Firefox can advertise a video+Opus format for a video-only stream, then
   // stall finalization waiting for the missing audio track. Match actual tracks.
   // If none of our preferred containers is advertised, let the browser choose.
@@ -113,6 +119,7 @@ export class RecordingSession {
       revokeURL: url => URL.revokeObjectURL(url),
       now: () => Date.now(),
       stopTimeoutMs: 5000,
+      preferMP4: false,
       ...platform,
     };
   }
@@ -170,7 +177,7 @@ export class RecordingSession {
       for (const source of sources) {
         if (source.stream.getTracks().some(track => track.readyState === 'ended')) throw new Error(`${source.label} is no longer available. Choose the source again.`);
         const recorder = this.platform.createRecorder(source.stream, recorderOptions(
-          source.stream.getVideoTracks().length > 0, source.stream.getAudioTracks().length > 0, quality, this.platform.supports,
+          source.stream.getVideoTracks().length > 0, source.stream.getAudioTracks().length > 0, quality, this.platform.supports, this.platform.preferMP4,
         ));
         let complete!: () => void;
         const entry: Entry = {

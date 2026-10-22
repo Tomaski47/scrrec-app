@@ -235,3 +235,12 @@ test('video-only MIME negotiation excludes audio codecs so Firefox can finalize'
   assert.equal(withAudio.mimeType, 'video/webm;codecs=vp8,opus');
   assert.equal(withAudio.audioBitsPerSecond, 256_000);
 });
+
+test('Apple mobile format preference selects native H.264/AAC containers with a supported fallback', () => {
+  const supports = () => true;
+  assert.equal(recorderOptions(true, true, 'best', supports, true).mimeType, 'video/mp4;codecs=avc1,mp4a.40.2');
+  assert.equal(recorderOptions(true, false, 'best', supports, true).mimeType, 'video/mp4;codecs=avc1');
+  assert.equal(recorderOptions(false, true, 'best', supports, true).mimeType, 'audio/mp4;codecs=mp4a.40.2');
+  assert.equal(recorderOptions(true, true, 'best', mime => mime === 'video/webm', true).mimeType, 'video/webm');
+  assert.equal(recorderOptions(true, true, 'best', supports).mimeType, 'video/webm;codecs=vp9,opus');
+});

@@ -1140,7 +1140,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const session = new RecordingSession({ state: setSessionState, recordings: setRecordings, bytes: setRecordingSize, message: setPermissionError });
+    const session = new RecordingSession({ state: setSessionState, recordings: setRecordings, bytes: setRecordingSize, message: setPermissionError }, { preferMP4: isAppleMobile(navigator) });
     sessionRef.current = session;
     return () => { session.dispose(); sessionRef.current = null; };
   }, []);

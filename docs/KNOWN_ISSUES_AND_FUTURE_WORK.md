@@ -61,7 +61,7 @@ iPhone Safari/Chrome may expose front and rear camera choices, but mobile browse
 
 ### Native Share Recovery
 
-The app permits only one native share attempt at a time, restores sharing after cancellation, and displays results beside each recording. Save remains usable while a share is pending. Some browser/OS share failures can leave the browser's own share promise unresolved; after 15 seconds the app explains how to Save and share from Files/Downloads instead. There is no web API to cancel/reset that native share operation. Save every wanted file before reloading; do not treat a pending share as a successful export. Physical iPhone rechecking of the export fix is pending.
+The app permits only one native share attempt at a time, restores sharing after cancellation, and displays results beside each recording. Save remains usable while a share is pending. Some browser/OS share failures can leave the browser's own share promise unresolved; after 15 seconds the app explains how to Save and share from Files/Downloads instead. There is no web API to cancel/reset that native share operation. Save every wanted file before reloading; do not treat a pending share as a successful export. Front-camera plus microphone capture passed the phone retest. Sharing and video saved/opened outside the page still failed, while audio playback worked. The next candidate prefers MP4/H.264/AAC video and M4A/AAC audio on Apple mobile devices; physical export rechecking is pending. Do not mark the release ready on the basis of in-page playback alone.
 
 ### Reliability Baseline (0.2.0)
 
