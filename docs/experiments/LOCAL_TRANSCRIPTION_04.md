@@ -46,6 +46,8 @@ No new physical iPhone result is claimed. The prior user-confirmed 40-second pho
 
 ## Recorder UX follow-up
 
+[Recorder transcription preview 6](https://screc.sadilekinnovation.com/recorder-preview/local-6-8c2f4c4/) runs source `8c2f4c4`. Production remains v0.2.0.
+
 Enabling transcription now prepares Tiny automatically. Starting while preparation is pending or failed, while no microphone is selected, or while an overloaded queue is draining opens an explicit choice before any capture prompt. Waiting for readiness does not start capture automatically. Choosing **Record without transcription** turns the option off. Preparation cancellation also turns it off; retry is available after errors. Completed text is retained.
 
 Transcription uses the same source-row dimensions, spacing and theme styles as Screen/Mic/Camera. The copy is shorter and the confusing note about tab/system audio has been removed. Download size, model source, license notices and model removal are grouped inside a collapsed About transcription section; no Optional/Beta label is shown. Removing cached model files first unloads transcription and turns its checkbox off, preserving unrelated caches and all media/text. Media acquisition and audio routing are unchanged. New captures collapse earlier media and text under **Previous sessions**. A single share lock covers both sections, and previous recordings remain downloadable. Clear All remains explicit.
