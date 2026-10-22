@@ -46,7 +46,7 @@ No new physical iPhone result is claimed. The prior user-confirmed 40-second pho
 
 ## Recorder UX follow-up
 
-[Recorder transcription preview 7](https://screc.sadilekinnovation.com/recorder-preview/local-7-9a6bfda/) runs source `9a6bfda`. Production remains v0.2.0.
+[Recorder transcription preview 8](https://screc.sadilekinnovation.com/recorder-preview/local-8-710e39f/) runs source `710e39f`. Production remains v0.2.0.
 
 Enabling transcription now prepares Tiny automatically. Starting while preparation is pending or failed, while no microphone is selected, or while an overloaded queue is draining opens an explicit choice before any capture prompt. Waiting for readiness does not start capture automatically. Choosing **Record without transcription** turns the option off. Preparation cancellation also turns it off; retry is available after errors. Completed text is retained.
 
