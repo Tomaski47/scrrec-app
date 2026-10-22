@@ -90,7 +90,7 @@ async (page) => {
   await page.getByText('Local model: loaded', {exact:true}).waitFor();
   if (await toggle.isChecked()) throw new Error('Managing the model enabled transcription.');
   if (await page.locator('.speech-info').evaluate(node => node.open)) throw new Error('Download details should start collapsed.');
-  if (await page.getByText('English speech model.', {exact:false}).isVisible()) throw new Error('Download details are not subtle.');
+  if (await page.getByRole('link', {name:'Whisper Tiny (English)',exact:true}).isVisible()) throw new Error('Download details are not subtle.');
   await page.evaluate(async () => {
     const cache = await caches.open('transcription-ux-fixture');
     await cache.put('https://huggingface.co/Xenova/whisper-tiny.en/resolve/79fb389fc764e7c395bd330e9531d9d32ada7049/config.json', new Response('fixture model'));

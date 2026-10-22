@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { sessionText, type SpeechSession, type SpeechSnapshot } from '../transcription/controller';
 import { MODELS, RETIRED_MODELS } from '../transcription/protocol';
+import { TranscriptionLicenses } from './TranscriptionLicenses';
 import './LocalTranscription.css';
 
 interface Props { enabled: boolean; setEnabled: (enabled: boolean) => void; recording: boolean; hasMic: boolean; speech: SpeechSnapshot; prepare: () => void; unload: () => void }
@@ -9,7 +10,7 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
   const [removing, setRemoving] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const panelId = useId();
-  const modelLabel = speech.modelStatus === 'ready' ? 'Loaded' : speech.modelStatus === 'loading' ? 'Loading' : speech.modelStatus === 'error' ? 'Unavailable' : 'Not loaded';
+  const modelLabel = speech.modelStatus === 'ready' ? 'Loaded' : speech.modelStatus === 'loading' ? 'Loading' : speech.modelStatus === 'error' ? 'Error' : 'Not loaded';
   const removeCache = async () => {
     unload();
     setRemoving(true);
@@ -32,9 +33,10 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
   return <div className="transcription-control">
     <section className={`option-block transcription-option${enabled ? ' has-submenu' : ''}`} aria-labelledby="speech-heading">
       <label className="options-checkbox"><input className="styled-checkbox" type="checkbox" aria-label="Local transcription" checked={enabled} disabled={recording || removing} onChange={event => { setCacheMessage(''); setEnabled(event.target.checked); }} />
-        <span className="speech-label"><span id="speech-heading">Local transcription</span><small className="speech-model-label" aria-live="polite">Local model: {modelLabel.toLowerCase()}</small></span>
+        <span id="speech-heading">Local transcription</span>
       </label>
       <button type="button" className="speech-expand" aria-label={`Transcription settings. Model ${modelLabel.toLowerCase()}`} aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpanded(value => !value)}>
+        <span className="speech-model-label" aria-live="polite"><span className="speech-model-prefix">Local </span>model: {modelLabel.toLowerCase()}</span>
         <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" style={{ transform: expanded ? 'rotate(180deg)' : undefined }}><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
       </button>
       <div id={panelId} className="device-submenu speech-setup" hidden={!expanded}>
@@ -48,14 +50,17 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
               : <button className="mini-action" disabled={recording || removing} onClick={prepare}>{speech.modelStatus === 'error' ? 'Retry preparation' : 'Load model'}</button>}
           {!recording && <button className="mini-action" disabled={removing} onClick={() => void removeCache()}>Remove model</button>}
         </div>
-        {speech.message && (speech.modelStatus === 'error' || speech.modelStatus === 'ready') && <p className={`speech-status${speech.modelStatus === 'error' ? ' speech-warning' : ''}`} role={speech.modelStatus === 'error' ? 'alert' : 'status'}>{speech.message}</p>}
+        {speech.message && (speech.modelStatus === 'error' || (speech.modelStatus === 'ready' && (enabled || recording))) && <p className={`speech-status${speech.modelStatus === 'error' ? ' speech-warning' : ''}`} role={speech.modelStatus === 'error' ? 'alert' : 'status'}>{speech.message}</p>}
         <details className="speech-info">
           <summary>About transcription</summary>
-          <p>English speech model. About 60 MB on first use, downloaded from Hugging Face and cached when available.</p>
-          <p>Unload model frees memory. Remove model also deletes its cached download.</p>
-          <p>On iPhone and iPad, switching apps or locking the screen may interrupt transcription.</p>
-          <p>Review important details. Save recordings and transcripts before closing this tab.</p>
-          <p><a href={`${import.meta.env.BASE_URL}licenses/README.txt`} target="_blank" rel="noreferrer">Speech engine notices</a></p>
+          <ul className="speech-details-list">
+            <li><strong>Speech model:</strong> <a href={`https://huggingface.co/${MODELS.tiny.id}`} target="_blank" rel="noreferrer">Whisper Tiny (English)</a> <span className="speech-model-id">{MODELS.tiny.id}</span></li>
+            <li><strong>First download:</strong> About 60 MB from Hugging Face, cached on this device when available.</li>
+            <li><strong>Model controls:</strong> Unload frees memory. Remove also deletes its cached download.</li>
+            <li><strong>On iPhone/iPad:</strong> Switching apps or locking the screen may interrupt transcription.</li>
+            <li><strong>Your text:</strong> Review important details and save recordings and transcripts before closing this tab.</li>
+          </ul>
+          <TranscriptionLicenses />
         </details>
         {cacheMessage && <p className="speech-cache-message speech-footnote" role="status">{cacheMessage}</p>}
       </div>
