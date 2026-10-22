@@ -8,22 +8,22 @@
   <body>
     <main>
       <a href="/">← Screen Recorder</a>
-      <p class="eyebrow">IPHONE TRANSCRIPTION PREVIEW 3</p>
+      <p class="eyebrow">LOCAL TRANSCRIPTION LAB</p>
       <h1>Record. Read along.</h1>
       <p class="intro">Try local English transcription with Whisper. Audio stays in this tab. Loading a model downloads the speech engine from this site and model weights from Hugging Face; no audio is sent to them.</p>
       <section aria-labelledby="model-heading">
         <h2 id="model-heading">1. Load a speech model</h2>
-        <label>Model <select id="model"><option value="tiny">Whisper Tiny English · about 44 MB</option><option value="base">Whisper Base English · larger</option></select></label>
+        <label>Model <select id="model"><option value="tiny">Whisper Tiny English · about 60 MB</option><option value="base">Whisper Base English · larger</option></select></label>
         <label>Processor <select id="device"><option value="wasm">CPU / WASM</option><option value="webgpu">WebGPU · experimental</option></select></label>
         <div class="actions"><button id="load">Load model</button><button id="cancel">Unload / cancel transcription</button><button id="clear-cache">Clear experiment model cache</button></div>
         <p id="status" role="status" aria-live="polite">No model loaded. Nothing downloads until you choose Load model.</p>
       </section>
       <section aria-labelledby="audio-heading">
-        <h2 id="audio-heading">2. Try a short recording</h2>
+        <h2 id="audio-heading">2. Try live transcription</h2>
         <p>Live mode records one microphone and transcribes that same stream. Keep this page in the foreground. A slow or failed transcript will not stop your recording.</p>
         <label>Microphone <select id="microphone"><option value="">Browser default</option></select></label>
         <div class="actions"><button id="start" disabled>Record + transcribe</button><button id="stop" disabled>Stop recording</button></div>
-        <p id="capture-status" role="status">Live experiment limit: 2 minutes. Text starts after about 12 seconds plus processing time; draft endings may change as more speech arrives.</p>
+        <p id="capture-status" role="status">Live transcription has no fixed time limit. Recordings remain in tab memory; save regularly. Text starts after about 12 seconds plus processing time; draft endings may change as more speech arrives.</p>
         <div id="recording"></div>
         <hr />
         <label>Or choose a completed audio/video file (max 20 MB and 60 seconds)<input id="file" type="file" accept="audio/*,video/*" /></label>

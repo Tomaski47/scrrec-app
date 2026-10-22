@@ -11,19 +11,20 @@ export default defineConfig(({ mode }) => ({
     name: 'release-metadata',
     generateBundle() {
       this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ version, revision: buildRevision }) + '\n' });
-      if (mode === 'experiments') for (const name of readdirSync(new URL('./experiments/licenses/', import.meta.url))) {
+      for (const name of readdirSync(new URL('./experiments/licenses/', import.meta.url))) {
         this.emitFile({ type: 'asset', fileName: `licenses/${name}`, source: readFileSync(new URL(`./experiments/licenses/${name}`, import.meta.url), 'utf8') });
       }
     },
   }],
   define: { __APP_VERSION__: JSON.stringify(version), 'import.meta.env.VITE_BUILD_REVISION': JSON.stringify(buildRevision) },
-  // The lab is opt-in and excluded from the normal production build.
+  build: { assetsInlineLimit: 0 },
+  worker: {
+    format: 'es',
+    // nginx serves .js consistently as JavaScript; not every host maps .mjs.
+    rollupOptions: { output: { assetFileNames: asset => asset.names.some(name => name.endsWith('.mjs')) ? 'assets/[name]-[hash].js' : 'assets/[name]-[hash][extname]' } },
+  },
+  // The lab page is excluded from the normal production build.
   ...(mode === 'experiments' ? {
-    worker: {
-      format: 'es',
-      // nginx serves .js consistently as JavaScript; not every host maps .mjs.
-      rollupOptions: { output: { assetFileNames: asset => asset.names.some(name => name.endsWith('.mjs')) ? 'assets/[name]-[hash].js' : 'assets/[name]-[hash][extname]' } },
-    },
     build: { outDir: 'output/transcription-lab', assetsInlineLimit: 0, rollupOptions: { input: ['index.html', 'experiments/transcription.html'] } },
   } : {}),
   server: {

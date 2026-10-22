@@ -66,7 +66,7 @@ function RecordingCard({ recording, sharing }: { recording: CompletedRecording; 
   );
 }
 
-export function RecordingList({ recordings }: { recordings: CompletedRecording[] }) {
+export function RecordingList({ recordings, transcriptIds = [] }: { recordings: CompletedRecording[]; transcriptIds?: string[] }) {
   const lock = useRef(false);
   const [active, setActive] = useState<string | null>(null);
   const sharing: Sharing = {
@@ -85,6 +85,9 @@ export function RecordingList({ recordings }: { recordings: CompletedRecording[]
     <h2>Recordings</h2>
     <p>Files stay here for this tab session. Save them before closing or reloading the page.</p>
     {active !== null && !recordings.some(recording => recording.id === active) && <p role="status" className="save-feedback">Your browser still has a share pending. Use Save for these files. Save all recordings before reloading this tab.</p>}
-    {recordings.map(recording => <RecordingCard key={recording.id} recording={recording} sharing={sharing} />)}
+    {recordings.map(recording => <div key={recording.id}>
+      {transcriptIds.includes(recording.sessionId) && <a href={`#transcript-${recording.sessionId}`}>View session transcript</a>}
+      <RecordingCard recording={recording} sharing={sharing} />
+    </div>)}
   </section>;
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BoundedQueue, Resampler, Segmenter } from '../src/experiments/transcription/audio.ts';
+import { BoundedQueue, Resampler, Segmenter } from '../src/transcription/audio.ts';
 
 test('streaming resampling is invariant to worklet block boundaries at 44.1 and 48 kHz', () => {
   for (const rate of [44_100, 48_000]) {

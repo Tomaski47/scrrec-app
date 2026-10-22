@@ -82,19 +82,20 @@ export class Segmenter {
 }
 
 /** One in flight + two queued phrases; on overload drop ASR only, never media. */
-export class BoundedQueue {
-  private waiting: Segment[] = [];
-  active: Segment | undefined;
+export class BoundedQueue<T extends Segment = Segment> {
+  private waiting: T[] = [];
+  active: T | undefined;
   accepting = true;
-  private send: (segment: Segment) => void;
+  private send: (segment: T) => void;
   private overflow: () => void;
-  constructor(send: (segment: Segment) => void, overflow: () => void) { this.send = send; this.overflow = overflow; }
-  add(segment: Segment) {
-    if (!this.accepting) return;
-    if (this.active && this.waiting.length >= 2) { this.accepting = false; this.overflow(); return; }
+  constructor(send: (segment: T) => void, overflow: () => void) { this.send = send; this.overflow = overflow; }
+  add(segment: T) {
+    if (!this.accepting) return false;
+    if (this.active && this.waiting.length >= 2) { this.accepting = false; this.overflow(); return false; }
     this.waiting.push(segment); this.pump();
+    return true;
   }
-  complete(id: number): Segment | undefined {
+  complete(id: number): T | undefined {
     if (this.active?.id !== id) return;
     const done = this.active; this.active = undefined; this.pump(); return done;
   }

@@ -1,4 +1,4 @@
-Local transcription experiment: third-party software notices
+Optional local transcription: third-party software notices
 
 Transformers.js 4.3.0 and its bundled Hugging Face Tokenizers 0.2.0:
 Apache-2.0; see huggingface-Apache-2.0.txt.

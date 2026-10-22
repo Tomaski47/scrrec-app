@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { precedingContext, suspectCoverage, timedWords } from '../src/experiments/transcription/inference.ts';
+import { precedingContext, suspectCoverage, timedWords } from '../src/transcription/inference.ts';
 
 test('retry context precedes the incoming window without copying its overlap twice', () => {
   const prior = Float32Array.from({ length: 12 * 16_000 }, (_, i) => i);

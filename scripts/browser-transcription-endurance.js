@@ -1,6 +1,6 @@
 async (page) => {
   // CLI fixture: load the real model first. Poll window.endurance after starting;
-  // the app's real two-minute limit ends capture. Never access physical devices.
+  // the fixture stops this two-minute comparison. Never access physical devices.
   if (!/^http:\/\/(127\.0\.0\.1|localhost):/.test(page.url())) throw new Error('Generated media is localhost-only.');
   if (await page.getByRole('button', { name: 'Record + transcribe' }).isDisabled()) throw new Error('Load the model first.');
   await page.locator('#file').setInputFiles('output/transcription-benchmark/reference.wav');
@@ -91,6 +91,7 @@ async (page) => {
         document.querySelector('#stop').click();
         if (recorder.state !== 'inactive') recorder.stop();
       }, 150_000);
+      state.plannedStop = setTimeout(() => document.querySelector('#stop').click(), 120_000);
       return destination.stream;
     };
   });

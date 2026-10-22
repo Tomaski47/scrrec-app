@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Segmenter, SAMPLE_RATE, OVERLAP_SECONDS, WINDOW_SECONDS } from '../src/experiments/transcription/audio.ts';
-import { reconcile } from '../src/experiments/transcription/reconcile.ts';
-import type { Segment, Word } from '../src/experiments/transcription/protocol.ts';
+import { Segmenter, SAMPLE_RATE, OVERLAP_SECONDS, WINDOW_SECONDS } from '../src/transcription/audio.ts';
+import { reconcile } from '../src/transcription/reconcile.ts';
+import type { Segment, Word } from '../src/transcription/protocol.ts';
 
 const segment = (start = 0, end = 8, final = false): Segment => ({ id: start ? 2 : 1, utterance: 1, start, end, overlap: start ? 3 : 0, final, audio: new Float32Array(0) });
 const words = (text: string, start: number, step = 0.3): Word[] => text.split(' ').map((text, i) => ({ text: ` ${text}`, start: start + i * step, end: start + (i + 1) * step }));

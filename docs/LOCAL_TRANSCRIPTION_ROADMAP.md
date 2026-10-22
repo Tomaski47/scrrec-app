@@ -1,12 +1,12 @@
 # Local transcription and live assistance roadmap
 
-Updated: October 22, 2026. Status: v0.2.0 reliability release shipped. An isolated local transcription lab now implements short-file and live microphone paths with quantized Whisper Tiny/Base selection. Extended Tiny/WASM validation and [Preview 3](experiments/LOCAL_TRANSCRIPTION_03.md) are complete; this is not integrated into the production recorder.
+Updated: October 22, 2026. Status: v0.2.0 reliability release shipped. An isolated local transcription lab now implements short-file and live microphone paths with quantized Whisper Tiny/Base selection. Extended Tiny/WASM validation and [Preview 3](experiments/LOCAL_TRANSCRIPTION_03.md) are complete; the current branch adds an optional main-recorder beta and removes the live two-minute cutoff. See [integration validation](experiments/LOCAL_TRANSCRIPTION_04.md). The production deployment remains v0.2.0 pending rollout.
 
 ## Product direction
 
 Let a user record and build a transcript locally in the same session. The transcript should also be recoverable by processing a completed recording. Later, finalized text can drive meeting notes, suggested questions, action items, or prompts during a livestream. Release the reliability candidate first, then validate this direction with a small experiment.
 
-The user confirmed English first and reported perfect playback/transcription in a 40-second iPhone test of [Preview 2](experiments/LOCAL_TRANSCRIPTION_02.md). Extended automated checks then revealed omissions. [Preview 3](experiments/LOCAL_TRANSCRIPTION_03.md) bundles the newer engine, uses longer overlapping windows and retries suspicious results once with actual preceding audio. The full quiet reference now matches all 369 words; exact noisy-input replay improved from 112 word edits to two isolated edits. File/live checks and recording preservation pass in Firefox. Broader human speech/noise comparisons, Base/Moonshine, actual camera/screen integration, offline startup and phone interruptions remain gates. Automated WebKit could not launch; the newer engine has not been retested on physical iPhone. More manual phone testing is deferred at the user's request without blocking preview delivery.
+The user confirmed English first and reported perfect playback/transcription in a 40-second iPhone test of [Preview 2](experiments/LOCAL_TRANSCRIPTION_02.md). Extended automated checks then revealed omissions. [Preview 3](experiments/LOCAL_TRANSCRIPTION_03.md) bundles the newer engine, uses longer overlapping windows and retries suspicious results once with actual preceding audio. The full quiet reference now matches all 369 words; exact noisy-input replay improved from 112 word edits to two isolated edits. File/live checks and recording preservation pass in Firefox. Broader human speech/noise comparisons, Base/Moonshine, sustained integrated capture, offline startup and phone interruptions remain validation gates. Automated WebKit could not launch; the newer engine has not been retested on physical iPhone. More manual phone testing is deferred at the user's request without blocking preview delivery.
 
 Live text is the intended direction. A recorded-audio transcription feature is an early useful outcome and a fallback for devices that cannot transcribe fast enough while capturing video. Build both around the same transcript representation, so adding live assistance does not require replacing the first feature.
 
@@ -59,7 +59,7 @@ Effort below is a rough engineering estimate, not a delivery commitment. Browser
 
 Build the live path in phase 1 rather than waiting until all recorded-audio UI is complete. If it clears the resource/accuracy gates early, a limited live beta can accompany phase 2. A strong microphone-only livestream/narration use case can ship before full meeting coverage.
 
-Phase 1 is underway. The extended-session repair and self-hosted runtime are now available in Preview 3. Next compare models and representative voices/noise, then choose a default before building the production transcript panel. Recording stability and recognition accuracy remain separate acceptance gates.
+Phase 1 is underway. The extended-session repair and self-hosted runtime are now available in Preview 3. Next compare models and representative voices/noise, Tiny/CPU is the conservative beta default; compare alternatives before adding engine choices to the main recorder. Recording stability and recognition accuracy remain separate acceptance gates.
 
 ## Validation and resource budget
 

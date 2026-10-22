@@ -78,3 +78,7 @@ The release candidate retains completed files independently of selected sources 
 7. **Remaining maintenance and polish:** extract device enumeration/metering/camera capability logic, consolidate duplicate CSS using visual comparisons, and add opt-in redacted capability diagnostics, and automatically pass the source revision through future VPS deployments. Composed screen-plus-camera output, speaker diarization, Continuity targeting, and simultaneous mobile cameras stay later work.
 
 Continuity microphones and simultaneous mobile cameras remain exploratory work rather than release guarantees.
+
+## Optional transcription beta (October 22, 2026)
+
+The working branch integrates English Tiny/CPU transcription into the main recorder, off by default, with per-session TXT/JSON exports. Live processing has no fixed two-minute cutoff; PCM, queue and the revisable transcript tail remain bounded. Finished text and encoded recordings still grow in tab memory. See [validation and remaining limits](experiments/LOCAL_TRANSCRIPTION_04.md). Production rollout, longer physical-phone endurance/interruptions, representative speech/model comparisons, offline startup, transcript editing and incremental decoding of long imported recordings remain follow-up work. The lab’s 20 MB / 60-second file limit is separate from live capture.

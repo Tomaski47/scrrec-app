@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { reconcile } from '../src/experiments/transcription/reconcile.ts';
+import { reconcile } from '../src/transcription/reconcile.ts';
 
 const label = process.argv[2];
 if (!/^[a-z0-9-]+$/.test(label || '')) throw new Error('Pass a saved generated test label.');

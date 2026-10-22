@@ -1,9 +1,9 @@
 import './lab.css';
-import { BoundedQueue, Resampler, SAMPLE_RATE, Segmenter } from './audio';
-import { MODELS, RETIRED_MODELS, type Device, type Model, type Response, type Transcript } from './protocol';
+import { BoundedQueue, Resampler, SAMPLE_RATE, Segmenter } from '../../transcription/audio';
+import { MODELS, RETIRED_MODELS, type Device, type Model, type Response, type Transcript } from '../../transcription/protocol';
 import { RecordingSession } from '../../recorder/session';
 import { isAppleMobile } from '../../recorder/cameras';
-import { reconcile } from './reconcile';
+import { TranscriptAssembler } from '../../transcription/assembler';
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 element<HTMLAnchorElement>('notices').href = `${import.meta.env.BASE_URL}licenses/README.txt`;
@@ -14,7 +14,8 @@ let ready = false, loading = false, decoding = false, capturing = false, incompl
 let generation = 0;
 let queue: BoundedQueue | undefined;
 let timeout: ReturnType<typeof setTimeout> | undefined;
-let captureLimit: ReturnType<typeof setTimeout> | undefined;
+let activateTap: (() => void) | undefined;
+let assembler = new TranscriptAssembler();
 let transcript: Transcript[] = [];
 let windows: { id: number; start: number; end: number; overlap: number; final: boolean; text: string; inferenceMs: number; retried: boolean; review: boolean }[] = [];
 let maxQueue = 0;
@@ -37,7 +38,7 @@ function controls() {
   element<HTMLSelectElement>('microphone').disabled = capturing;
   element<HTMLInputElement>('file').disabled = capturing || busy;
   element('transcript-state').textContent = incomplete ? '· incomplete' : queue?.depth ? '· processing' : capturing ? '· listening' : transcript.length ? '· finished' : '';
-  element('metrics').textContent = JSON.stringify({ preview: 'iphone-3', revision: import.meta.env.VITE_BUILD_REVISION, userAgent: navigator.userAgent, secureContext: isSecureContext, model: MODELS[model], runtime: 'transformers.js 4.3.0', device, dtype: 'q8', source, contextRate, loadMs, maxQueue,
+  element('metrics').textContent = JSON.stringify({ preview: 'long-session-lab', revision: import.meta.env.VITE_BUILD_REVISION, userAgent: navigator.userAgent, secureContext: isSecureContext, model: MODELS[model], runtime: 'transformers.js 4.3.0', device, dtype: 'q8', source, contextRate, loadMs, maxQueue,
     modelFiles: Object.fromEntries(files), reportedModelBytes: [...files.values()].reduce((sum, file) => sum + file.total, 0),
     windows: windows.map(w => ({ ...w, realTimeFactor: w.inferenceMs / ((w.end - w.start) * 1000) })),
     segments: transcript, incomplete }, null, 2);
@@ -54,7 +55,7 @@ function unload() {
   controls();
 }
 function newTranscript(label: string) {
-  transcript = []; windows = []; incomplete = false; source = label; maxQueue = 0;
+  assembler = new TranscriptAssembler(); transcript = []; windows = []; incomplete = false; source = label; maxQueue = 0;
   element('transcript').replaceChildren();
   queue = new BoundedQueue(segment => {
     if (!worker || !ready) return;
@@ -73,7 +74,7 @@ button('load').onclick = () => {
   device = element<HTMLSelectElement>('device').value as Device;
   status('Loading runtime and speech model. The first download may take a few minutes…');
   controls();
-  const current = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+  const current = new Worker(new URL('../../transcription/worker.ts', import.meta.url), { type: 'module' });
   worker = current;
   timeout = setTimeout(() => fail('Model loading timed out.'), 180_000);
   current.onerror = event => { if (worker === current) fail(event.message || 'Speech worker failed.'); };
@@ -91,13 +92,11 @@ button('load').onclick = () => {
       clearTimeout(timeout);
       const segment = queue?.complete(message.id);
       if (segment) {
-        const previous = transcript.find(item => item.id === segment.utterance);
-        const item = reconcile(previous, segment, message.text, message.words, message.ms);
-        item.recognitionReview = previous?.recognitionReview || message.review;
-        if (previous) transcript[transcript.indexOf(previous)] = item;
-        else transcript.push(item);
+        assembler.add(segment, message.text, message.words, message.ms, message.review);
+        transcript = [...assembler.blocks.map(block => ({ ...block, words: [], final: true, revisions: 1, inferenceMs: 0 })), ...(assembler.draft ? [assembler.draft] : [])];
         windows.push({ id: segment.id, start: segment.start, end: segment.end, overlap: segment.overlap, final: segment.final, text: message.text, inferenceMs: message.ms, retried: message.retried, review: message.review });
-        element('transcript').replaceChildren(...transcript.map(item => {
+        windows = windows.slice(-20);
+        element('transcript').replaceChildren(...transcript.slice(-20).map(item => {
           const row = document.createElement('li');
           row.textContent = `${item.start.toFixed(1)}–${item.end.toFixed(1)}s${item.final ? '' : ' · draft ending'}${item.boundaryReview ? ' · check join' : ''}${item.recognitionReview ? ' · check recognition' : ''} · ${item.text || '[No text detected]'}`;
           return row;
@@ -133,9 +132,10 @@ button('clear-cache').onclick = async () => {
 const session = new RecordingSession({
   state: state => {
     capturing = state !== 'idle'; controls();
-    if (state === 'idle') { clearTimeout(captureLimit); element('capture-status').textContent = 'Recording stopped. Save the audio below; transcript processing may finish afterward.'; }
+    if (state === 'recording') activateTap?.();
+    if (state === 'idle') { element('capture-status').textContent = 'Recording stopped. Save the audio below; transcript processing may finish afterward.'; }
   },
-  bytes: bytes => { element('capture-status').textContent = `Recording · ${(bytes / 1_000_000).toFixed(1)} MB · automatic stop at 2 minutes`; },
+  bytes: bytes => { element('capture-status').textContent = `Recording · ${(bytes / 1_000_000).toFixed(1)} MB`; },
   message: text => { element('capture-status').textContent = text; },
   recordings: recordings => {
     const panel = element('recording'); panel.replaceChildren();
@@ -150,9 +150,10 @@ const session = new RecordingSession({
 
 button('start').onclick = async () => {
   if (!ready || capturing || queue?.depth) return;
+  activateTap = undefined;
   newTranscript('selected microphone');
   const current = generation;
-  const began = await session.start(async owner => {
+  await session.start(async owner => {
     let context: AudioContext | undefined;
     let resumed = Promise.resolve(false);
     const cleanup: { finishTap?: () => Promise<void> } = {};
@@ -170,9 +171,10 @@ button('start').onclick = async () => {
     try {
       if (!context || !await Promise.race([resumed, new Promise<boolean>(resolve => setTimeout(() => resolve(false), 2500))])) throw new Error('Audio processing could not start.');
       contextRate = context.sampleRate;
-      await context.audioWorklet.addModule(new URL('./capture.worklet.js', import.meta.url));
+      await context.audioWorklet.addModule(new URL('../../transcription/capture.worklet.js', import.meta.url));
       if (owner.signal.aborted) return [];
       const tap = new AudioWorkletNode(context, 'transcription-tap');
+      activateTap = () => tap.port.postMessage('start');
       const input = context.createMediaStreamSource(stream);
       const mute = context.createGain(); mute.gain.value = 0;
       input.connect(tap); tap.connect(mute); mute.connect(context.destination);
@@ -192,7 +194,7 @@ button('start').onclick = async () => {
     } catch (error) { fail(`Audio tap unavailable: ${String(error)}`); }
     return [{ label: 'Microphone', kind: 'mic', stream }];
   }, 'mid');
-  if (began) captureLimit = setTimeout(() => void session.stop(), 120_000);
+
   controls();
 };
 button('stop').onclick = () => { void session.stop(); };
@@ -221,7 +223,7 @@ button('transcribe').onclick = async () => {
   } catch (error) { if (current === generation) status(String(error)); }
   finally { await context.close(); if (current === generation) { decoding = false; controls(); } }
 };
-const report = () => ({ transcript, measurements: JSON.parse(element('metrics').textContent || '{}'), speechStatus: element('status').textContent, captureStatus: element('capture-status').textContent });
+const report = () => ({ text: (assembler.blocks.map(block => block.text).join('') + assembler.draftText).trim(), transcript, measurements: JSON.parse(element('metrics').textContent || '{}'), speechStatus: element('status').textContent, captureStatus: element('capture-status').textContent });
 button('copy-report').onclick = () => {
   if (!navigator.clipboard?.writeText) { status('Clipboard unavailable. Use Download transcript + measurements to save the report.'); return; }
   void navigator.clipboard.writeText(JSON.stringify(report(), null, 2)).then(

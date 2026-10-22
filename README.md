@@ -83,7 +83,11 @@ npm run check
 
 See [Release 0.2.0](docs/RELEASE_0.2.0.md) for browser checks and the deployment checklist.
 
-An opt-in [local transcription experiment](docs/experiments/LOCAL_TRANSCRIPTION_01.md) is available at `/experiments/transcription.html` on the development server. `npm run build:experiments` creates its separate preview bundle in `output/transcription-lab/`; the normal production build excludes it.
+The main recorder includes an optional English local-transcription beta. Select Mic, enable Local transcription, choose Prepare local transcription, and wait for Model ready before recording. Nothing from the speech engine downloads until preparation. Tiny runs on the device using the selected microphone streams; transcription errors or cancellation do not stop recording. Each recording session has a transcript with copy, TXT and JSON export.
+
+Live transcription has no fixed time cutoff. PCM, queued jobs and the revisable text remain bounded; saved transcript text and encoded recordings still grow in tab memory. Keep the tab open and in the foreground, and save regularly. This does not promise unlimited phone endurance or offline startup. See [integration and validation](docs/experiments/LOCAL_TRANSCRIPTION_04.md).
+
+The separate research lab remains at `/experiments/transcription.html` during development. `npm run build:experiments` builds it in `output/transcription-lab/`; the normal build includes the recorder feature but excludes the lab page. Lab file import remains limited to 20 MB / 60 seconds; long-file recovery needs incremental decoding.
 
 ## Deployment
 
