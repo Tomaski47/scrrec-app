@@ -37,7 +37,7 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
       </label>
       <button type="button" className="speech-expand" aria-label={`Transcription settings. Model ${modelLabel.toLowerCase()}`} aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpanded(value => !value)}>
         <span className="speech-model-label" aria-live="polite"><span className="speech-model-prefix">Local </span>model: {modelLabel.toLowerCase()}</span>
-        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" style={{ transform: expanded ? 'rotate(180deg)' : undefined }}><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" style={{ transform: expanded ? 'rotate(90deg)' : undefined }}><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
       </button>
       <div id={panelId} className="device-submenu speech-setup" hidden={!expanded}>
         {enabled && <p>Audio and text stay on your device.</p>}
