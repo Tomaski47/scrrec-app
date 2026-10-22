@@ -18,7 +18,7 @@ Release execution later on October 21 clears the dependency findings with Vite 6
 
 - Screen capture supports one or more screen slots, with each slot using the browser display picker and saving as a separate recording when the browser exposes `getDisplayMedia`.
 - Desktop microphone capture supports the OS default input, named physical inputs, gain, input metering, echo cancellation, noise suppression, and auto gain controls.
-- Camera capture supports browser-exposed camera devices, with mobile front/rear fallback behavior kept to one active camera at a time when the browser does not expose separate stable device IDs.
+- Camera capture supports browser-exposed camera devices, with one active camera at a time on iPhone/iPad regardless of stable device IDs; fallback camera choices are also exclusive.
 
 ## Implementation Notes
 
@@ -38,7 +38,7 @@ This is why the app keeps `Refresh mics` as a quiet enumeration action and `Scan
 
 ### Screen and Camera Decisions
 
-Browsers do not enumerate screens the same way they enumerate cameras and microphones. The app uses screen slots instead: each selected slot opens the browser display picker, and each chosen display records as a separate file. Screen capture is capability-based rather than viewport-based: mobile-sized layouts still show the screen controls if the browser exposes `getDisplayMedia`, but many actual mobile browsers do not expose that API. For mobile cameras, front/rear fallback labels are kept single-choice when the browser does not expose stable IDs, because simultaneous front/rear mobile capture is not reliable in current browser behavior.
+Browsers do not enumerate screens the same way they enumerate cameras and microphones. The app uses screen slots instead: each selected slot opens the browser display picker, and each chosen display records as a separate file. Screen capture is capability-based rather than viewport-based: mobile-sized layouts still show the screen controls if the browser exposes `getDisplayMedia`, but many actual mobile browsers do not expose that API. Front/rear camera choices are single-choice on iPhone and iPad, including the iPad desktop browser identity and real camera device IDs. Opening a second camera during phone acceptance muted the first. Fallback camera choices are also exclusive.
 
 ## Future Work
 
@@ -57,7 +57,11 @@ The likely future direction is to investigate whether macOS Continuity devices c
 
 ### Multi-Camera Mobile Capture
 
-iPhone Safari/Chrome may expose front and rear camera choices, but mobile browsers often allow only one active camera stream at a time. The current app keeps front/rear fallback cameras mutually exclusive on mobile. Future work can revisit simultaneous front/rear capture if browser support improves or if this becomes a native-app feature.
+iPhone Safari/Chrome may expose front and rear camera choices, but mobile browsers often allow only one active camera stream at a time. The release candidate keeps every iPhone/iPad camera choice mutually exclusive, including real IDs. Fallback cameras also remain mutually exclusive. Future work can revisit simultaneous front/rear capture if browser support improves or if this becomes a native-app feature.
+
+### Native Share Recovery
+
+The app permits only one native share attempt at a time, restores sharing after cancellation, and displays results beside each recording. Save remains usable while a share is pending. Some browser/OS share failures can leave the browser's own share promise unresolved; after 15 seconds the app explains how to Save and share from Files/Downloads instead. There is no web API to cancel/reset that native share operation. Save every wanted file before reloading; do not treat a pending share as a successful export. Physical iPhone rechecking of the export fix is pending.
 
 ### Reliability Baseline (0.2.0)
 

@@ -3,6 +3,7 @@ import './App.css';
 import { RecordingSession, AUDIO_BITRATES, type AudioQuality, type CompletedRecording, type SessionState, type Acquisition, type RecordingSource } from './recorder/session';
 import { Modal } from './components/Modal';
 import { RecordingList } from './components/RecordingList';
+import { genericFrontCameraId, genericRearCameraId, genericCameraId, isGenericCameraId, isAppleMobile, requiresSingleCamera, nextCameraIds } from './recorder/cameras';
 
 type WebkitAudioWindow = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext;
@@ -237,9 +238,6 @@ type PermissionTarget = 'all' | 'audio' | 'video';
 const defaultAudioDeviceId = 'default';
 const unlockAudioDeviceId = '__allow_microphone_access__';
 const genericAudioDeviceId = '__generic_microphone__';
-const genericFrontCameraId = '__front_camera__';
-const genericRearCameraId = '__rear_camera__';
-const genericCameraId = '__camera__';
 
 const createSyntheticAudioDevice = (deviceId: string, label: string) => ({
   deviceId,
@@ -427,12 +425,6 @@ const normalizeAudioDevices = (devices: MediaDeviceInfo[], hasAudioAccess: boole
 const isGenericMicId = (micId: string) => micId === genericAudioDeviceId;
 const isMicUnlockId = (micId: string) => micId === unlockAudioDeviceId;
 
-const isGenericCameraId = (cameraId: string) => (
-  cameraId === genericFrontCameraId ||
-  cameraId === genericRearCameraId ||
-  cameraId === genericCameraId
-);
-
 const getCameraFallbackId = (device: MediaDeviceInfo) => {
   const label = `${device.label || ''} ${device.deviceId || ''}`.toLowerCase();
   if (label.includes('front') || label.includes('user') || label.includes('facetime')) return genericFrontCameraId;
@@ -444,22 +436,6 @@ const getCameraFallbackLabel = (cameraId: string) => {
   if (cameraId === genericFrontCameraId) return 'Front Camera';
   if (cameraId === genericRearCameraId) return 'Rear Camera';
   return 'Camera';
-};
-
-const shouldUseSingleMobileCamera = (cameraIds: string[]) => (
-  cameraIds.some(isGenericCameraId)
-);
-
-const buildNextCameraIds = (currentIds: string[], nextId: string, checked: boolean) => {
-  if (!checked) {
-    return currentIds.filter(id => id !== nextId);
-  }
-
-  if (shouldUseSingleMobileCamera([...currentIds, nextId])) {
-    return [nextId];
-  }
-
-  return currentIds.includes(nextId) ? currentIds : [...currentIds, nextId];
 };
 
 const normalizeCameraDevices = (devices: MediaDeviceInfo[]) => {
@@ -527,7 +503,6 @@ function App() {
   const [screenDevices, setScreenDevices] = useState<ScreenDevice[]>([createScreenDevice(1)]);
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordingSize, setRecordingSize] = useState(0);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [hasRequestedAudioPermission, setHasRequestedAudioPermission] = useState(false);
   const [hasRequestedVideoPermission, setHasRequestedVideoPermission] = useState(false);
 
@@ -543,7 +518,7 @@ function App() {
   } | null>(null);
 
   // Constants
-  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isMobile = isAppleMobile(navigator) || /Mobi|Android/i.test(navigator.userAgent);
   // Update document title
   useEffect(() => {
     document.title = "Screen Recorder | Sadilek Innovation";
@@ -1045,7 +1020,6 @@ function App() {
       return;
     }
     stopMicMeter();
-    setSaveMessage(null);
     void session.start(async owner => {
       const sources: RecordingSource[] = [];
       const sizes: Record<VideoResolution, MediaTrackConstraints> = {
@@ -1078,8 +1052,8 @@ function App() {
         setHasRequestedAudioPermission(true);
         setPermissionStatus(prev => ({ ...prev, microphone: 'granted' }));
       }
-      if (shouldUseSingleMobileCamera(recordOptions.cameraIds) && recordOptions.cameraIds.length > 1) {
-        throw new Error('Choose one mobile fallback camera at a time.');
+      if (requiresSingleCamera(recordOptions.cameraIds, navigator) && recordOptions.cameraIds.length > 1) {
+        throw new Error('Choose one camera at a time on this device.');
       }
       for (const [index, cameraId] of recordOptions.cameraIds.entries()) {
         owner.signal.throwIfAborted();
@@ -1113,7 +1087,6 @@ function App() {
   const stopRecording = () => { void sessionRef.current?.stop(); };
   const confirmClear = () => {
     sessionRef.current?.clear();
-    setSaveMessage(null);
     setShowClearConfirmation(false);
   };
 
@@ -1662,7 +1635,9 @@ function App() {
                             </button>
                           </div>
                           <p className="submenu-hint">
-                            If the browser exposes real camera devices, you can try selecting several. Front/Rear fallback cameras record one at a time on mobile.
+                            {requiresSingleCamera(cameraDevices.map(device => device.deviceId), navigator)
+                              ? 'Choose one camera at a time. Selecting another replaces the current camera.'
+                              : 'You can select several cameras if your browser and hardware support simultaneous capture.'}
                           </p>
                           {cameraDevices.map((device) => (
                             <div key={device.deviceId}>
@@ -1672,10 +1647,11 @@ function App() {
                                   checked={recordOptions.cameraIds.includes(device.deviceId)}
                                   onChange={(e) => {
                                     if (recording) return;
-                                    const cameraIds = buildNextCameraIds(
+                                    const cameraIds = nextCameraIds(
                                       recordOptions.cameraIds,
                                       device.deviceId,
-                                      e.target.checked
+                                      e.target.checked,
+                                      navigator
                                     );
                                     if (e.target.checked) {
                                       void loadCameraResolutions([device]);
@@ -1741,8 +1717,7 @@ function App() {
               {recordingSize > 500 * 1024 ** 2 && ' — Large recording. Stop and save soon to reduce memory pressure.'}
             </div>
           </>}
-          {saveMessage && <p role="status" className="save-feedback">{saveMessage}</p>}
-          <RecordingList recordings={recordings} notify={setSaveMessage} />
+          <RecordingList recordings={recordings} />
           {recordings.length > 0 && <button className="clear-button" disabled={recording || deviceBusy} onClick={() => setShowClearConfirmation(true)}>Clear All</button>}
           {showClearConfirmation && <Modal title="Clear recordings?" onDismiss={() => setShowClearConfirmation(false)}>
             <p>This deletes all recordings in this tab. Check that any files you need have finished downloading first.</p>
