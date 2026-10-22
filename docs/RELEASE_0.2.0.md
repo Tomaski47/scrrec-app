@@ -1,8 +1,8 @@
 # 0.2.0 — reliability and maintenance
 
-Status: release candidate, updated October 21, 2026. Deploy after the physical-device acceptance checks below. This change does not itself deploy production or tag a public release.
+Status: shipped October 21, 2026. [PR #1](https://github.com/Tomaski47/scrrec-app/pull/1) is merged and production verification passed. See the [v0.2.0 publication record](https://github.com/Tomaski47/scrrec-app/releases/tag/v0.2.0) for the final release revision and distributable.
 
-October 21 release execution: Vite is updated to 6.4.5 and source-map-js to 1.2.2; unused Tailwind tooling is removed, clearing the nine newly affected development/build packages. The dependency audit again reports zero findings. Removing unused Tailwind tooling left CSS byte-for-byte unchanged; the separate mobile styling changes are listed below. Release acceptance is in progress; see the [current roadmap](KNOWN_ISSUES_AND_FUTURE_WORK.md) and [local transcription proposal](LOCAL_TRANSCRIPTION_ROADMAP.md).
+October 21 release execution: Vite is updated to 6.4.5 and source-map-js to 1.2.2; unused Tailwind tooling is removed, clearing the nine newly affected development/build packages. The dependency audit again reports zero findings. Removing unused Tailwind tooling left CSS byte-for-byte unchanged; the separate mobile styling changes are listed below. Release acceptance and production checks passed within the coverage described below; see the [current roadmap](KNOWN_ISSUES_AND_FUTURE_WORK.md) and [local transcription proposal](LOCAL_TRANSCRIPTION_ROADMAP.md).
 
 ## Changes
 
@@ -57,18 +57,22 @@ The fixture only accepts localhost URLs. It replaces acquisition in that isolate
 
 ## Deployment acceptance
 
-- [x] Hosted CI passes for the final source candidate (`9d5ea5a`): build, 16 tests, dependency audit, and container checks. Recheck the documentation-only acceptance update before merge.
+- [x] Hosted CI passes for the accepted PR and merged source (`1e0dd05`): build, 16 tests, dependency audit, and container checks. The final documentation record is checked again before publication.
 - [x] Desktop Chrome: real tab + named mic + camera capture, all three files play to the end. Synthetic browser checks cover picker cancellation, retries, source termination, and retention.
 - [x] Desktop Firefox: native encoder checks cover screen/mic/camera input, combined sources, playback, filenames, and Share recovery with simulated share responses.
 - [x] Physical iPhone audio-only recording, local save, and saved-file playback: approximately three hours, owner reported.
 - [x] iPhone Safari on Release check 5: front-camera + mic, MP4 metadata, Save Video to Photos, repeated video/audio sharing, success feedback, and Save → View browser playback.
 - [x] Direct iPhone Save → Download video playback: the owner confirmed the downloaded MP4 plays from Downloads in the browser.
 - [x] A 30-minute concurrent recording completes, downloads, fully decodes, and plays to the end. Memory and stream timestamps were checked as described above; perceptual hardware sync remains outside this synthetic test.
-- [ ] Verify deployed `/version.json` identifies the approved build and `/healthz` is healthy. Inspect response headers after any CDN/reverse proxy and check CSP reports in the browser console before considering enforcement.
-- [ ] Smoke-test the deployed app, then tag/publish `v0.2.0` with this changelog.
+- [x] Deployed `/version.json` reports version 0.2.0 and the approved revision; `/healthz` returns `ok`. Public asset hashes match the built app, missing JavaScript returns 404, HTML/metadata revalidate, all security headers are present, HTTP upgrades to HTTPS, and directory redirects preserve HTTPS. CSP remains report-only.
+- [x] The deployed app recorded a real Chrome tab + named microphone + FaceTime HD camera, and all three files played to the end. Test media was cleared without downloading. The linked GitHub release records publication of `v0.2.0`.
+
+CSP observation: the smoke-test harness fetches its own Blob URLs to measure file sizes, producing report-only `connect-src` notices. App playback uses the separately allowed `media-src blob:` path. Enforcement remains disabled pending broader hosting/browser observation.
 
 Coverage limits: native desktop Safari automation was unavailable. The actual browser Stop sharing control and perceptual hardware A/V sync were not independently checked; source termination and stream timestamp checks cover their narrower cases. Phone orientation changes were not separately instrumented. The confirmed phone export paths are Photos saving, repeated native sharing, browser View, and direct Download playback in the browser.
 
 Build from the approved commit using Node 24 and `npm ci`, or build the Docker image with `--build-arg BUILD_REVISION=<approved-commit>`. CI-generated artifacts include the GitHub commit in `version.json`. The checked-in `dist` remains available for the existing static deployment path; a local build is explicitly identified as `local` unless `BUILD_REVISION` is provided.
 
-Keep the previous static bundle or image digest before switching traffic. Roll back by redeploying that exact artifact; there is no server-side database migration. Users must save active recordings before a reload or deployment-related refresh.
+Deployment note: the VPS Dockerfile builder does not automatically inject the Git revision. This release supplies `BUILD_REVISION` for each build, then restores the previous empty build arguments so future builds cannot inherit a stale revision. Future VPS releases must supply their approved revision again; automating that handoff remains maintenance work.
+
+The previous production image and private service/configuration snapshot were preserved before rollout. Keep the previous static bundle or image digest before switching traffic. Roll back by redeploying that exact artifact; there is no server-side database migration. Users must save active recordings before a reload or deployment-related refresh.

@@ -1,6 +1,6 @@
 # Screen Recorder
 
-A local-first browser recorder for screen, camera, and microphone capture. The live app is available at [screc.sadilekinnovation.com](https://screc.sadilekinnovation.com/).
+A local-first browser recorder for screen, camera, and microphone capture. The live app is available at [screc.sadilekinnovation.com](https://screc.sadilekinnovation.com/). See [v0.2.0](https://github.com/Tomaski47/scrrec-app/releases/tag/v0.2.0) for the reliability release and verification notes.
 
 Screen Recorder is a Sadilek Innovation project built from a Bolt DIY start, refined through the 2025 app pass, and refreshed in 2026 with a cleaner UI and a more stable source-selection flow.
 
