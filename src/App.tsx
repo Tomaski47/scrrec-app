@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { RecordingSession, AUDIO_BITRATES, type AudioQuality, type CompletedRecording, type SessionState, type Acquisition, type RecordingSource } from './recorder/session';
 import { Modal } from './components/Modal';
-import { RecordingList } from './components/RecordingList';
-import { genericFrontCameraId, genericRearCameraId, genericCameraId, isGenericCameraId, isAppleMobile, requiresSingleCamera, nextCameraIds, cameraChoiceLabels } from './recorder/cameras';
+import { SessionResults } from './components/SessionResults';
+import { LocalTranscription } from './components/LocalTranscription';
+import { useLocalTranscription } from './transcription/useLocalTranscription';
+import { genericFrontCameraId, genericRearCameraId, genericCameraId, isGenericCameraId, isAppleMobile, requiresSingleCamera, nextCameraIds, cameraChoiceLabels, cameraDescription } from './recorder/cameras';
 
 type WebkitAudioWindow = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext;
@@ -108,7 +110,7 @@ const legalDocuments: Record<LegalDocument, {
 }> = {
   privacy: {
     title: 'Privacy Policy',
-    updated: 'June 9, 2026',
+    updated: 'October 22, 2026',
     sections: [
       {
         heading: 'Overview',
@@ -121,6 +123,10 @@ const legalDocuments: Record<LegalDocument, {
       {
         heading: 'Recordings',
         body: 'Recorded files remain in your browser session until you choose to save or share them. If you use browser share or download features, your browser, operating system, or selected destination may process that file.',
+      },
+      {
+        heading: 'Optional local transcription',
+        body: 'When enabled and prepared, transcription processes the selected microphone audio on your device. Audio and transcript text are not uploaded for recognition. Preparing the feature downloads a speech engine from this site and model files from Hugging Face, which receives normal download request data. Model files may remain in browser caches; choose Remove model in the transcription controls to remove the cached model files used here. Transcript text remains in this tab until cleared or closed. Save it separately from your recordings.',
       },
       {
         heading: 'Site and hosting data',
@@ -480,6 +486,10 @@ function App() {
   const deviceOperationsRef = useRef(0);
   const [sessionState, setSessionState] = useState<SessionState>('idle');
   const recording = sessionState !== 'idle'; // Lock every source control during acquisition/finalization too.
+  const [transcriptionEnabled, setTranscriptionEnabled] = useState(false);
+  const { controller: transcriptionRef, speech } = useLocalTranscription();
+  const [showTranscriptionWarning, setShowTranscriptionWarning] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [recordings, setRecordings] = useState<CompletedRecording[]>([]);
   const [screenPrompt, setScreenPrompt] = useState<{ label: string; choose: () => void; cancel: () => void } | null>(null);
   const sessionRef = useRef<RecordingSession | null>(null);
@@ -999,7 +1009,14 @@ function App() {
     } });
   });
 
-  const startRecording = () => {
+  const changeTranscription = (enabled: boolean) => {
+    setTranscriptionEnabled(enabled);
+    const engine = transcriptionRef.current;
+    if (!enabled && recording) engine?.stopCapture();
+    else if (enabled && engine && !['ready', 'loading'].includes(engine.snapshot().modelStatus)) engine.load();
+  };
+
+  const startRecording = (withoutTranscription = false) => {
     const session = sessionRef.current;
     if (!session || session.state !== 'idle' || deviceOperationsRef.current > 0) return;
     if (!window.isSecureContext) {
@@ -1015,8 +1032,16 @@ function App() {
       setPermissionError('Choose at least one recording source.');
       return;
     }
+    if (transcriptionEnabled && !withoutTranscription && (!micIds.length || !transcriptionRef.current?.snapshot().canStartCapture)) {
+      setShowTranscriptionWarning(true);
+      return;
+    }
     stopMicMeter();
     void session.start(async owner => {
+      setCurrentSessionId(owner.sessionId);
+      const transcription = transcriptionEnabled && !withoutTranscription && micIds.length
+        ? transcriptionRef.current?.beginCapture(owner.sessionId, micIds.map(id => micDevices.find(device => device.deviceId === id)?.label || 'Microphone').join(' + ')) : undefined;
+      if (transcription) owner.ownCleanup(() => transcription.finish());
       const sources: RecordingSource[] = [];
       const sizes: Record<VideoResolution, MediaTrackConstraints> = {
         fullscreen: {}, '1080p': { width: 1920, height: 1080 }, '720p': { width: 1280, height: 720 },
@@ -1074,6 +1099,7 @@ function App() {
         videoAudio = owner.ownStream(destination.stream);
         await context.resume();
       }
+      await transcription?.attach(micStreams);
       return sources.map(source => source.kind !== 'mic' && videoAudio
         ? { ...source, stream: owner.ownStream(new MediaStream([...source.stream.getVideoTracks(), ...videoAudio.getAudioTracks()])) }
         : source);
@@ -1083,6 +1109,9 @@ function App() {
   const stopRecording = () => { void sessionRef.current?.stop(); };
   const confirmClear = () => {
     sessionRef.current?.clear();
+    transcriptionRef.current?.clear();
+    setTranscriptionEnabled(false);
+    setCurrentSessionId(null);
     setShowClearConfirmation(false);
   };
 
@@ -1136,10 +1165,13 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const session = new RecordingSession({ state: setSessionState, recordings: setRecordings, bytes: setRecordingSize, message: setPermissionError }, { preferMP4: isAppleMobile(navigator) });
+    const session = new RecordingSession({ state: state => {
+      setSessionState(state);
+      if (state === 'recording') transcriptionRef.current?.activateCapture();
+    }, recordings: setRecordings, bytes: setRecordingSize, message: setPermissionError }, { preferMP4: isAppleMobile(navigator) });
     sessionRef.current = session;
     return () => { session.dispose(); sessionRef.current = null; };
-  }, []);
+  }, [transcriptionRef]);
 
   useEffect(() => {
     if (sessionState !== 'recording') { setRecordingTime(0); return; }
@@ -1150,11 +1182,11 @@ function App() {
   }, [sessionState]);
 
   useEffect(() => {
-    if (!recording && !recordings.length) return;
+    if (!recording && !recordings.length && !speech.sessions.length) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [recording, recordings.length]);
+  }, [recording, recordings.length, speech.sessions.length]);
 
   const activeLegalDocument = legalModal ? legalDocuments[legalModal] : null;
 
@@ -1162,6 +1194,7 @@ function App() {
   return (
     <div className={`App ${darkMode ? 'dark-mode' : 'light-mode'}`}>
       <main className="app-shell">
+        {import.meta.env.VITE_PREVIEW_LABEL && <p className="brand-kicker">{import.meta.env.VITE_PREVIEW_LABEL}</p>}
         <section className="site-intro" aria-labelledby="site-title">
           <div className="brand-row">
             <span className="brand-kicker">Sadilek Innovation Lab</span>
@@ -1635,12 +1668,13 @@ function App() {
                               ? 'Choose one camera at a time. Selecting another replaces the current camera.'
                               : 'You can select several cameras if your browser and hardware support simultaneous capture.'}
                           </p>
-                          {isAppleMobile(navigator) && cameraDevices.length > 1 && <p className="submenu-hint">Your browser may list lenses and combined camera modes as separate choices.</p>}
+                          {isAppleMobile(navigator) && cameraDevices.length > 1 && <p className="submenu-hint">Dual and Triple are lens groups with one video output. The browser controls lens selection.</p>}
                           {cameraDevices.map((device) => (
                             <div key={device.deviceId}>
                               <label className="device-item">
                                 <input
-                                  type="checkbox"
+                                  type={requiresSingleCamera(cameraDevices.map(camera => camera.deviceId), navigator) ? 'radio' : 'checkbox'}
+                                  name="camera-device"
                                   checked={recordOptions.cameraIds.includes(device.deviceId)}
                                   onChange={(e) => {
                                     if (recording) return;
@@ -1657,7 +1691,7 @@ function App() {
                                   }}
                                   disabled={recording || deviceBusy}
                                 />
-                                <span className="device-label">{device.label || "Camera"}</span>
+                                <span className="device-label">{device.label || "Camera"}{cameraDescription(device.label) && <small className="camera-description">{cameraDescription(device.label)}</small>}</span>
                                 <span className="device-permission">
                                   {recordOptions.cameraIds.includes(device.deviceId) && permissionStatus.camera === "granted" ? ": granted" : ""}
                                 </span>
@@ -1687,16 +1721,23 @@ function App() {
                         </div>
                       )}
                     </div>
+                    <LocalTranscription
+                      enabled={transcriptionEnabled} setEnabled={changeTranscription} recording={recording}
+                      hasMic={recordOptions.mic && recordOptions.micIds.some(id => !isMicUnlockId(id))}
+                      speech={speech} prepare={() => transcriptionRef.current?.load()} unload={() => {
+                        setTranscriptionEnabled(false);
+                        transcriptionRef.current?.unload('Speech model unloaded. Existing text is kept.');
+                      }}
+                    />
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <p className="capture-note">Screen and camera save as separate videos with your selected microphone audio. Tab/system audio is not captured.</p>
           <div className="action-buttons">
             {!window.isSecureContext && window.location.protocol === 'http:' && <p role="alert">Recording requires HTTPS. <a href={window.location.href.replace(/^http:/, 'https:')}>Open the secure page</a>.</p>}
-            <button className="btn" onClick={startRecording} disabled={recording || deviceBusy}>Start Recording</button>
+            <button className="btn" onClick={() => startRecording()} disabled={recording || deviceBusy}>Start Recording</button>
             <button className={recording ? 'neon-stop' : 'btn-disabled'} onClick={stopRecording} disabled={!recording || sessionState === 'stopping'}>
               {sessionState === 'acquiring' ? 'Cancel capture' : 'Stop Recording'}
             </button>
@@ -1714,10 +1755,10 @@ function App() {
               {recordingSize > 500 * 1024 ** 2 && ' — Large recording. Stop and save soon to reduce memory pressure.'}
             </div>
           </>}
-          <RecordingList recordings={recordings} />
-          {recordings.length > 0 && <button className="clear-button" disabled={recording || deviceBusy} onClick={() => setShowClearConfirmation(true)}>Clear All</button>}
-          {showClearConfirmation && <Modal title="Clear recordings?" onDismiss={() => setShowClearConfirmation(false)}>
-            <p>This deletes all recordings in this tab. Check that any files you need have finished downloading first.</p>
+          <SessionResults recordings={recordings} transcripts={speech.sessions} currentSessionId={currentSessionId} recording={recording} />
+          {(recordings.length > 0 || speech.sessions.length > 0) && <button className="clear-button" disabled={recording || deviceBusy} onClick={() => setShowClearConfirmation(true)}>Clear All</button>}
+          {showClearConfirmation && <Modal title="Clear recordings and transcripts?" onDismiss={() => setShowClearConfirmation(false)}>
+            <p>This deletes all recordings and transcripts in this tab and unloads the speech model. Check that any files and text you need have finished downloading first.</p>
             <div className="popup-buttons">
               <button className="popup-button confirm" onClick={confirmClear}>Yes</button>
               <button className="popup-button cancel" onClick={() => setShowClearConfirmation(false)}>No</button>
@@ -1727,6 +1768,31 @@ function App() {
             <p>Your earlier sources are ready. Choose the next screen to continue.</p>
             <button className="btn" onClick={screenPrompt.choose}>Choose {screenPrompt.label}</button>
             <button className="footer-button footer-link" onClick={screenPrompt.cancel}>Cancel capture</button>
+          </Modal>}
+          {showTranscriptionWarning && <Modal title="Before you record" onDismiss={() => setShowTranscriptionWarning(false)}>
+            <p>{!recordOptions.mic || !recordOptions.micIds.some(id => !isMicUnlockId(id))
+              ? 'Transcription needs a microphone. Select Mic above, or record without transcription.'
+              : speech.modelStatus === 'loading'
+                ? 'Transcription is still preparing. Wait until it is ready, or record without transcription.'
+                : speech.modelStatus === 'error'
+                  ? 'The speech model could not load. Try preparing it again, or record without transcription.'
+                  : speech.modelStatus === 'unloaded'
+                    ? 'Transcription needs to be prepared before recording. Try again, or record without transcription.'
+                  : !speech.canStartCapture
+                    ? 'Transcription is not ready yet. Wait for the previous transcript to finish, or record without transcription.'
+                    : 'Transcription is ready. You can start your recording now.'}</p>
+            <div className="speech-actions">
+              {speech.canStartCapture && recordOptions.mic && recordOptions.micIds.some(id => !isMicUnlockId(id)) && <button className="btn" onClick={() => { setShowTranscriptionWarning(false); startRecording(); }}>Record with transcription</button>}
+              <button className="mini-action" onClick={() => {
+                setShowTranscriptionWarning(false);
+                changeTranscription(false);
+                startRecording(true);
+              }}>Record without transcription</button>
+              <button className="mini-action" onClick={() => {
+                setShowTranscriptionWarning(false);
+                if (speech.modelStatus === 'error' || speech.modelStatus === 'unloaded') transcriptionRef.current?.load();
+              }}>{speech.modelStatus === 'error' || speech.modelStatus === 'unloaded' ? 'Try again' : 'Back to setup'}</button>
+            </div>
           </Modal>}
           {permissionError && <Modal title="Recording notice" onDismiss={() => setPermissionError(null)}>
             <p style={{ whiteSpace: 'pre-line' }}>{permissionError}</p>

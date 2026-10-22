@@ -10,6 +10,7 @@ export interface RecordingSource {
 
 export interface CompletedRecording {
   id: string;
+  sessionId: string;
   label: string;
   kind: RecordingSource['kind'];
   blob: Blob;
@@ -21,6 +22,7 @@ export interface CompletedRecording {
 }
 
 export interface Acquisition {
+  sessionId: string;
   signal: AbortSignal;
   ownStream: (stream: MediaStream) => MediaStream;
   ownCleanup: (cleanup: () => void | Promise<void>) => void;
@@ -54,6 +56,7 @@ interface Entry {
 }
 
 interface Run {
+  id: string;
   abort: AbortController;
   streams: Set<MediaStream>;
   cleanup: Array<() => void | Promise<void>>;
@@ -140,6 +143,7 @@ export class RecordingSession {
     if (this.run || this.disposed) return false;
     let resolve!: () => void;
     const run: Run = {
+      id: crypto.randomUUID(),
       abort: new AbortController(), streams: new Set(), cleanup: [], entries: [],
       acquiring: true, partial: false, bytes: 0,
       done: new Promise<void>(r => { resolve = r; }), resolve: () => resolve(),
@@ -150,6 +154,7 @@ export class RecordingSession {
     const check = () => { if (run.abort.signal.aborted) throw new DOMException('Capture cancelled', 'AbortError'); };
     try {
       const sources = await acquire({
+        sessionId: run.id,
         signal: run.abort.signal,
         ownStream: stream => {
           if (run.abort.signal.aborted) {
@@ -246,7 +251,7 @@ export class RecordingSession {
       const id = String(++this.sequence);
       const createdAt = new Date(entry.startedAt ?? this.platform.now());
       this.outputs = [...this.outputs, {
-        id, label: entry.source.label, kind: entry.source.kind, blob,
+        id, sessionId: run.id, label: entry.source.label, kind: entry.source.kind, blob,
         url: this.platform.createURL(blob), filename: recordingFilename(entry.source.kind, mime, createdAt, id),
         createdAt, duration: Math.max(0, this.platform.now() - createdAt.getTime()) / 1000, partial: run.partial,
       }];

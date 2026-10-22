@@ -108,6 +108,20 @@ test('startup is locked before an asynchronous picker completes; cancelling rele
   assert.equal(f.outputs().length, 0);
 });
 
+test('one acquisition ID associates all outputs and changes for the next recording', async () => {
+  const f = fixture();
+  let captureId = '';
+  await f.session.start(async owner => {
+    captureId = owner.sessionId;
+    return ['screen', 'camera', 'mic'].map(kind => ({ kind: kind as 'screen' | 'camera' | 'mic', label: kind, stream: owner.ownStream(media().stream) }));
+  }, 'low');
+  await f.session.stop();
+  assert.ok(captureId);
+  assert.deepEqual(f.outputs().map(recording => recording.sessionId), [captureId, captureId, captureId]);
+  await record(f);
+  assert.notEqual(f.outputs().at(-1)?.sessionId, captureId);
+});
+
 test('Stop waits for queued final data even after recorder becomes inactive', async () => {
   const f = fixture(recorder => { recorder.stopDelay = 15; });
   await f.session.start(async owner => [{ label: 'Screen', kind: 'screen', stream: owner.ownStream(media().stream) }], 'best');

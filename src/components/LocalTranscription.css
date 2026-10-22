@@ -1,0 +1,58 @@
+.local-transcription { margin: 1.5rem 0; padding: 1.25rem; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 14px; text-align: left; }
+.transcription-control { width: 100%; text-align: left; }
+.App .recorder-panel .transcription-option { display: grid; grid-template-columns: minmax(0, 1fr) max-content; }
+.recorder-panel .transcription-option > label.options-checkbox { height: 50px; min-height: 50px; min-width: 0; padding: 14px 16px; }
+.recorder-panel .transcription-option > label input { flex-shrink: 0; }
+.speech-model-label { font-size: .75rem; font-weight: 400; line-height: 14px; opacity: .75; white-space: nowrap; }
+.speech-expand { align-self: center; display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: 44px; margin: 3px 4px; padding: 6px 8px; border: 0; border-radius: 6px; color: inherit; background: transparent; font: inherit; cursor: pointer; white-space: nowrap; }
+.speech-expand svg { flex-shrink: 0; }
+.speech-expand:focus-visible { outline: 3px solid #13cbb4; outline-offset: 1px; }
+.App .recorder-panel .transcription-option button.speech-expand,
+.App .recorder-panel .transcription-option button.speech-expand:hover { min-width: 0; background: transparent; box-shadow: none; transform: none; }
+.transcription-option [hidden] { display: none !important; }
+.speech-setup p, .transcript-card > p { font-size: .9rem; line-height: 1.6; margin: .8rem 0; }
+.speech-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
+.recorder-panel .transcription-option .speech-setup { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; padding-top: 10px; }
+.recorder-panel .transcription-option .speech-setup p { margin: 0; font-size: .82rem; line-height: 1.45; }
+.transcription-option input:focus-visible { outline: 3px solid #13cbb4; outline-offset: 3px; }
+.speech-footnote { opacity: .7; }
+.local-transcription a, .speech-setup a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.speech-status { color: inherit; }
+.speech-hint, .speech-warning { border-left: 2px solid #c99e54; padding-left: .75rem; }
+.speech-info { font-size: .8rem; }
+.speech-info > summary { cursor: pointer; padding: 4px 0; min-height: 30px; box-sizing: border-box; opacity: .75; }
+.speech-info > summary:focus-visible { outline: 3px solid #13cbb4; outline-offset: 3px; }
+.recorder-panel .transcription-option .speech-info p { margin: 6px 0; }
+.speech-cache-message { font-size: .85rem; }
+.speech-details-list { margin: 6px 0 10px; padding-left: 18px; font-size: .82rem; line-height: 1.45; }
+.speech-details-list li { margin: 0 0 8px; }
+.speech-model-id { display: block; opacity: .7; font-size: .75rem; overflow-wrap: anywhere; }
+.speech-licenses > summary, .speech-license-notice > summary { padding: 6px 0; cursor: pointer; }
+.speech-license-notice { margin-left: 10px; }
+.speech-license-text { max-height: 16rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 10px; border-radius: 6px; background: color-mix(in srgb, currentColor 5%, transparent); color: inherit; font-size: .75rem; line-height: 1.5; }
+@media (max-width: 700px) {
+  .recorder-panel .transcription-option > label.options-checkbox { font-size: .9rem; }
+  .speech-expand { gap: 4px; padding: 6px; }
+  .speech-model-label { font-size: .64rem; line-height: 12px; }
+  .speech-model-prefix { display: none; }
+}
+@media (max-width: 360px) {
+  .recorder-panel .transcription-option > label.options-checkbox { padding: 6px 8px 6px 10px; font-size: .85rem; }
+  .transcription-option #speech-heading { min-width: 0; line-height: 18px; overflow-wrap: anywhere; }
+  .speech-expand { padding: 6px 4px; }
+  .speech-model-label { max-width: 60px; font-size: .6rem; white-space: normal; text-align: right; }
+}
+.session-retention { font-size: .85rem; opacity: .7; }
+.session-result-heading { font-size: 1rem; text-align: left; margin-top: 1.5rem; }
+.session-history { margin: 1.5rem 0; text-align: left; border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent); padding-top: .5rem; }
+.session-history > summary { padding: .85rem .25rem; cursor: pointer; font-weight: 600; }
+.session-history > summary:focus-visible { outline: 3px solid #13cbb4; outline-offset: 3px; }
+.session-history .session-result { border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent); margin-top: 1rem; }
+.speech-title { display: flex; gap: 1rem; justify-content: space-between; align-items: baseline; }
+.speech-title h3 { margin: 0; }
+.speech-title > span { font-size: .8rem; color: #14b8a6; }
+.transcript-text { max-height: 32rem; overflow-y: auto; margin: 1rem 0; line-height: 1.7; overflow-wrap: anywhere; }
+.transcript-text p { white-space: pre-wrap; margin: .8rem 0; }
+.speech-time { display: block; font-size: .75rem; opacity: .6; font-variant-numeric: tabular-nums; }
+.speech-draft { opacity: .7; border-left: 2px solid #268b8c; padding-left: .8rem; }
+@media (max-width: 480px) { .local-transcription { padding: 1rem; } .speech-title { flex-wrap: wrap; gap: .4rem; } }

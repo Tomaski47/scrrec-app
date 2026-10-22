@@ -19,8 +19,7 @@ body.light-mode .app-dialog { background: #f6f8fc; color: #151b28; }
 .recording-card { margin: 24px auto; padding: 16px; max-width: 650px; border: 1px solid #7b73a4; border-radius: 12px; }
 .recording-card video { width: 100%; max-height: 420px; object-fit: contain; }
 .recording-card audio { max-width: 100%; }
-.recording-metadata, .capture-note, .save-feedback { font-size: 0.9rem; line-height: 1.5; overflow-wrap: anywhere; }
-.capture-note { max-width: 580px; margin: 16px auto; }
+.recording-metadata, .save-feedback { font-size: 0.9rem; line-height: 1.5; overflow-wrap: anywhere; }
 :is(button, input, select, summary, a):focus-visible { outline: 3px solid #ad78ff; outline-offset: 4px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
@@ -3754,3 +3753,6 @@ body.light-mode {
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+/* Keep the browser's native camera name visible beside its explanation. */
+.camera-description { display: block; font-size: 0.78em; font-weight: 400; opacity: 0.78; margin-top: 0.2rem; }
+.device-submenu input[type="radio"] { width: 20px; height: 20px; flex: 0 0 20px; accent-color: #21dcc1; cursor: pointer; }
