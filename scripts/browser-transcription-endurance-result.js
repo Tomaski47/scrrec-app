@@ -36,26 +36,28 @@ async (page) => {
   result.captureLifecyclePassed = !result.forcedStop && !result.error && result.microphoneRequests === 1 && result.tracksEnded && !result.metrics.incomplete && result.metrics.maxQueue <= 3;
   const heaps = result.samples.map(item => item.heap).filter(value => value !== null);
   result.mainThreadHeap = { start: heaps[0], max: Math.max(...heaps), end: heaps.at(-1), excludesWorkerWASMAndMedia: true };
-  for (const [url, filename] of [[result.videoURL, `endurance-${result.runName}-video.webm`], [result.audioURL, `endurance-${result.runName}-audio.webm`]]) {
+  // Save small measurements before large media/PCM exports: a full disk must
+  // not erase the accuracy evidence for an otherwise completed test.
+  const { videoURL, audioURL, pcmURL, ...report } = result;
+  const reportDownload = page.waitForEvent('download');
+  await page.evaluate(report => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'endurance-report.json'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }, report);
+  await (await reportDownload).saveAs(`output/transcription-benchmark/endurance-${result.runName}-report.json`);
+  for (const [url, filename] of [[videoURL, `endurance-${result.runName}-video.webm`], [audioURL, `endurance-${result.runName}-audio.webm`]]) {
     if (!url) throw new Error('Recorded media missing');
     const pending = page.waitForEvent('download');
     await page.evaluate(({ url, filename }) => { const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); }, { url, filename });
     await (await pending).saveAs(`output/transcription-benchmark/${filename}`);
   }
-  if (result.pcmURL) {
+  if (pcmURL) {
     const pending = page.waitForEvent('download');
-    await page.evaluate(({ url, name }) => { const link = document.createElement('a'); link.href = url; link.download = name; link.click(); }, { url: result.pcmURL, name: `endurance-${result.runName}-windows.f32` });
+    await page.evaluate(({ url, name }) => { const link = document.createElement('a'); link.href = url; link.download = name; link.click(); }, { url: pcmURL, name: `endurance-${result.runName}-windows.f32` });
     await (await pending).saveAs(`output/transcription-benchmark/endurance-${result.runName}-windows.f32`);
-    await page.evaluate(url => URL.revokeObjectURL(url), result.pcmURL);
+    await page.evaluate(url => URL.revokeObjectURL(url), pcmURL);
   }
-  delete result.videoURL; delete result.audioURL; delete result.pcmURL;
-  const pending = page.waitForEvent('download');
-  await page.evaluate(report => {
-    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }));
-    const link = document.createElement('a'); link.href = url; link.download = 'endurance-report.json'; link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  }, result);
-  await (await pending).saveAs(`output/transcription-benchmark/endurance-${result.runName}-report.json`);
   if (!result.captureLifecyclePassed) throw new Error(`Capture/queue regression; see endurance-${result.runName}-report.json`);
   if (result.snrDB === null && (result.normalizedWordErrors || result.metrics.segments.some(item => !item.final || item.boundaryReview || item.recognitionReview))) throw new Error(`Quiet reference regression; see endurance-${result.runName}-report.json`);
   return {

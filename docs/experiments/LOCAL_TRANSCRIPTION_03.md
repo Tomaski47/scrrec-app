@@ -1,6 +1,6 @@
 # Local transcription preview 3
 
-October 21, 2026. English-first, separate from production. This updates [Preview 2](LOCAL_TRANSCRIPTION_02.md); no additional manual phone test is required from the user this round.
+October 21–22, 2026. English-first, separate from production. This updates [Preview 2](LOCAL_TRANSCRIPTION_02.md); no additional manual phone test is required from the user this round.
 
 ## Repair and delivery
 
@@ -47,4 +47,16 @@ Use Node 24, localhost and the real Tiny model. Reference generation is describe
 
 Detailed evidence stays local in `output/transcription-benchmark/`; generated media/PCM are not committed or uploaded. Fresh hosted npm/container checks verify the lockfile. The low-space local machine reused identical installed 4.3.0/ONNX packages via APFS clones; CI/container builds skip unrelated native ONNX GPU downloads because inference runs in the browser.
 
-Publication and the final concurrent-recording check are recorded below after verification.
+## Final concurrent recording check
+
+A fresh two-minute live run with the final repair and 18 dB noise reproduced the two word edits (0.54%). It stopped automatically at 120.101 s; all 15 windows completed, maximum queue depth was one, and windows 4/13 each retried once. No recognition-review flag remained; the uncertain join stayed visibly flagged. Exactly one microphone acquisition was supplied by the fixture, and all owned tracks ended. Full decoding of both saved files passed; video contained 1,801 decoded frames through approximately 120 seconds. Main-thread JS heap ranged from roughly 6.4 to 30.3 MB, excluding worker/WASM/encoder/media memory; this is not a total memory-bound claim.
+
+An earlier final capture retained playable media but its large trace export failed during local disk exhaustion. Its live ASR measurements were not retained or counted as a pass. The repeated run above saved measurements before media, and tracing was disabled to reduce disk use.
+
+## HTTPS preview
+
+The immutable [Preview 3 URL](https://screc.sadilekinnovation.com/transcription-preview/iphone-3-8e1d25a/) shows **IPHONE TRANSCRIPTION PREVIEW 3**, from source `8e1d25a47ddee7ba9f92673acac175512f97ceb4`. Use this versioned address: an early asset request at the unversioned `iphone-3/` path received a missing-file response cached by the delivery edge. No cache changes to the production site were needed.
+
+The publication script verified all 22 package files inside the serving container. Production version metadata stayed v0.2.0/revision `3f7e97fbd6f1e6f474c44a8a509d15c339298ee7`, and production root HTML remained SHA-256 `83b398796e190958e98d41f7a275504728b14672f3beabc03403db069bb882ac`. Preview 2 remains available. This is a temporary directory deployment and may need republishing after a production container replacement.
+
+Fresh hosted source and container checks both passed for the exact deployed source revision. All 22 public files matched their SHA-256 build hashes; JavaScript/CSS/WASM MIME types, HTTPS and HTTP-to-HTTPS redirects passed. The public browser showed the correct badge and revision, loaded Tiny in 4.353 s, and registered the HTTPS AudioWorklet without acquiring a microphone. With networking disabled after loading, the completed reference transcribed exactly in 2.241 s. CPU mode requested neither jsDelivr code nor the optional GPU WASM. This verifies inference in an already-loaded page, not offline startup or physical iPhone behavior.

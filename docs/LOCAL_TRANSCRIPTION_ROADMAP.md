@@ -1,6 +1,6 @@
 # Local transcription and live assistance roadmap
 
-Updated: October 21, 2026. Status: v0.2.0 reliability release shipped. An isolated local transcription lab now implements short-file and live microphone paths with quantized Whisper Tiny/Base selection. The first Tiny/WASM measurements are complete; this is not integrated into the production recorder. See [the experiment and results](experiments/LOCAL_TRANSCRIPTION_01.md).
+Updated: October 22, 2026. Status: v0.2.0 reliability release shipped. An isolated local transcription lab now implements short-file and live microphone paths with quantized Whisper Tiny/Base selection. Extended Tiny/WASM validation and [Preview 3](experiments/LOCAL_TRANSCRIPTION_03.md) are complete; this is not integrated into the production recorder.
 
 ## Product direction
 
