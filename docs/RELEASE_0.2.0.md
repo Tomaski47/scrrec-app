@@ -2,7 +2,7 @@
 
 Status: release candidate, updated October 21, 2026. Deploy after the physical-device acceptance checks below. This change does not itself deploy production or tag a public release.
 
-October 21 release execution: Vite is updated to 6.4.5 and source-map-js to 1.2.2; unused Tailwind tooling is removed, clearing the nine newly affected development/build packages. The dependency audit again reports zero findings. CSS output is byte-for-byte unchanged. Release acceptance is in progress; see the [current roadmap](KNOWN_ISSUES_AND_FUTURE_WORK.md) and [local transcription proposal](LOCAL_TRANSCRIPTION_ROADMAP.md).
+October 21 release execution: Vite is updated to 6.4.5 and source-map-js to 1.2.2; unused Tailwind tooling is removed, clearing the nine newly affected development/build packages. The dependency audit again reports zero findings. Removing unused Tailwind tooling left CSS byte-for-byte unchanged; the separate mobile styling changes are listed below. Release acceptance is in progress; see the [current roadmap](KNOWN_ISSUES_AND_FUTURE_WORK.md) and [local transcription proposal](LOCAL_TRANSCRIPTION_ROADMAP.md).
 
 ## Changes
 
@@ -14,7 +14,6 @@ October 21 release execution: Vite is updated to 6.4.5 and source-map-js to 1.2.
 - Production health/version endpoints, cache behavior, and consistent security headers. CSP stays report-only until deployed assets and hosting integrations have been observed.
 - Video-only MIME choices omit audio codecs, fixing a Firefox finalization stall reproduced during acceptance. The regression is covered in the lifecycle suite and real Firefox encoder checks.
 - Relative nginx directory redirects preserve HTTPS behind a TLS-terminating proxy. Cloudflare-origin HTTP requests redirect to HTTPS, with a one-day HSTS policy. An insecure-page recording error now explains how to open the secure page. These changes fix the HTTP downgrade found during the iPhone/desktop preview check.
-
 - Source rows use plain unchecked backgrounds and a subtle selected accent in both themes. Mobile Safari no longer renders an empty desktop-browser notice.
 - Apple mobile recording prefers native MP4/H.264/AAC video and M4A/AAC audio when supported, with capability-based fallback and actual-container filenames.
 - iPhone and iPad camera choices are exclusive even when Safari exposes real front/rear device IDs. This prevents opening a second camera from muting the first; iPad desktop browsing is included. Desktop multiple-camera selection remains available.
@@ -29,9 +28,11 @@ October 21 release execution: Vite is updated to 6.4.5 and source-map-js to 1.2.
 
 Synthetic capture does not exercise OS pickers, actual microphone/camera hardware, mobile resource limits, or a physical perceptual audio-sync reference. Native Firefox encoding is covered separately below.
 
-October 21 additional checks: physical Mac FaceTime HD camera plus built-in microphone capture and playback passed; test media was cleared. Firefox now passes screen-only recording, retained-output/retry flows, microphone-only capture, multiple screens, camera plus two microphones, and playback of all three combined-source files. Native desktop Safari automation was unavailable (remote automation disabled); a WebKit automation engine did not launch successfully. Physical iPhone testing is tracked separately and must not be inferred from these desktop results. The first phone pass confirmed microphone and rear-camera recording with audio; selecting front and rear together produced a black front-camera file, and cancelling Share left subsequent attempts unresponsive. Camera policy and Share feedback/serialization are repaired; the second phone pass confirmed front-camera plus microphone video/audio playback. Native Share still became unresponsive after its first invocation, video opened from Save/View could not play, and audio opened from Save/View did play. Apple mobile devices now prefer MP4/H.264 with AAC and M4A/AAC when supported, rather than browser-first WebM; the next phone export pass is pending.
+October 21 additional checks: physical Mac FaceTime HD camera plus built-in microphone capture and playback passed; test media was cleared. Firefox now passes screen-only recording, retained-output/retry flows, microphone-only capture, multiple screens, camera plus two microphones, and playback of all three combined-source files. Native desktop Safari automation was unavailable (remote automation disabled); a WebKit automation engine did not launch successfully. Physical iPhone testing is tracked separately and must not be inferred from these desktop results. Earlier phone checks found black front-camera output when both cameras were selected and unreliable native sharing/video playback outside the page. Camera policy, export format preference, and share feedback were repaired. Those earlier export reports did not identify the candidate version; the visibly labelled Release check 5 and its audio metadata are now confirmed. Video saving and repeated native sharing on that labelled candidate remain pending.
 
 October 21 extended acceptance:
+
+- The owner reported a successful approximately three-hour audio-only recording on a physical iPhone: the recording saved locally on the phone and the saved file played successfully. The labelled Release check 5 interface and its `audio/mp4` metadata were subsequently confirmed. This is a manual endurance/export result; no phone memory measurements or full-stream decoder analysis were collected. Video saving and repeated native sharing on this labelled candidate remain pending.
 
 - Chrome native tab capture through `getDisplayMedia` recorded and played to the end (4.56 seconds, 2992×1780). A further real tab + named built-in microphone + FaceTime HD camera recording produced all three files and played each to the end (about 4.8 seconds). Physical media was cleared without downloading; the captured tab contained only generated test content.
 - A concurrent screen, camera, and microphone soak ran for 1,825.6 seconds using synthetic canvas/oscillator sources with native Chrome VP9/Opus encoders. All three downloads succeeded: two 200,090,111-byte videos and one 58,629,060-byte audio file. Every video and audio stream decoded fully with no warnings; browser playback from 1,818 seconds reached the end of all three files. Audio/video end timestamps differed by at most 50 ms within each video; this is a timestamp check, not a perceptual sync measurement.
@@ -55,10 +56,11 @@ The fixture only accepts localhost URLs. It replaces acquisition in that isolate
 
 ## Deployment acceptance
 
-- [ ] Hosted CI passes for the final commit.
+- [x] Hosted CI passes for the source candidate (`1338b9d`): build, tests, dependency audit, and container checks. Recheck after subsequent changes.
 - [ ] Desktop Chrome: real screen + named mic + camera, playback with audible audio, retry after picker cancellation, and browser Stop sharing.
 - [ ] Desktop Firefox and Safari: screen/mic/camera individually, combined capture where supported, playback and filename/container checks.
-- [ ] iPhone Safari: camera/mic capture, download/share cancellation and success, portrait preview. Screen capture availability remains browser-dependent.
+- [x] Physical iPhone audio-only recording, local save, and saved-file playback: approximately three hours, owner reported.
+- [ ] iPhone Safari: camera/mic video on the labelled candidate, saved-video playback, native Share cancellation/retry and success, portrait preview. Screen capture availability remains browser-dependent.
 - [x] A 30-minute concurrent recording completes, downloads, fully decodes, and plays to the end. Memory and stream timestamps were checked as described above; perceptual hardware sync remains outside this synthetic test.
 - [ ] Verify deployed `/version.json` identifies the approved build and `/healthz` is healthy. Inspect response headers after any CDN/reverse proxy and check CSP reports in the browser console before considering enforcement.
 - [ ] Smoke-test the deployed app, then tag/publish `v0.2.0` with this changelog.
