@@ -57,10 +57,11 @@ class FakeWorker {
   }
 }
 class FakeTap implements CaptureTap {
-  callbacks: TapCallbacks; active = false; aborted = false;
+  callbacks: TapCallbacks; active = false; aborted = false; resumes = 0;
   constructor(callbacks: TapCallbacks) { this.callbacks = callbacks; }
   async attach() { this.callbacks.rate(48000); }
   activate() { this.active = true; }
+  resume() { this.resumes++; }
   abort() { this.aborted = true; }
   async finish() { this.active = false; }
   emit(id: number) { this.callbacks.segment(segment(id, 0, true)); }
@@ -178,5 +179,57 @@ test('model and inference timeouts release only engine resources and preserve te
     await new Promise(resolve => setTimeout(resolve, 25)); await capture.finish();
     const session = controller.snapshot().sessions[0];
     assert.equal(sessionText(session), 'kept'); assert.ok(session.finished && session.incomplete && taps[0].aborted);
+  } finally { controller.dispose(); }
+});
+
+test('an interruption preserves the active session/model, exposes resume and retains marked gaps in exports', async () => {
+  const { controller, worker, taps } = setup();
+  try {
+    const capture = controller.beginCapture('phone', 'mic')!; controller.activateCapture();
+    taps[0].emit(1); worker.result('Before lock');
+    taps[0].callbacks.interruption!({ start: 1, reason: 'Audio interrupted' }, false);
+    const paused = controller.snapshot();
+    assert.equal(paused.modelStatus, 'ready'); assert.equal(paused.canStartCapture, false);
+    assert.ok(paused.sessions[0].capturing && paused.sessions[0].paused);
+    assert.equal(taps[0].aborted, false); assert.equal(worker.terminated, false);
+    controller.resumeCapture(); assert.equal(taps[0].resumes, 1);
+    taps[0].callbacks.interruption!({ start: 1, end: 31, reason: 'Audio interrupted' }, true);
+    taps[0].emit(2); worker.result('After unlock'); await capture.finish();
+    const session = controller.snapshot().sessions[0];
+    assert.equal(sessionText(session), 'Before lock\n\nAfter unlock');
+    assert.equal(session.paused, false); assert.ok(session.finished && session.incomplete);
+    assert.deepEqual(session.interruptions, [{ start: 1, end: 31, reason: 'Audio interrupted' }]);
+    assert.equal(paused.sessions[0].interruptions[0].end, undefined, 'Published snapshots must not mutate');
+    assert.equal(controller.snapshot().modelStatus, 'ready');
+  } finally { controller.dispose(); }
+});
+
+test('stale interruption callbacks and wrappers cannot pause or stop the next capture', async () => {
+  const { controller, taps } = setup();
+  try {
+    const first = controller.beginCapture('first', 'mic')!; controller.activateCapture(); await first.finish();
+    controller.beginCapture('second', 'mic'); controller.activateCapture();
+    taps[0].callbacks.interruption!({ start: 1, reason: 'late' }, false); first.abort(); first.activate(); first.resume?.();
+    assert.equal(controller.snapshot().sessions[1].paused, false);
+    assert.equal(controller.snapshot().sessions[1].capturing, true); assert.equal(taps[1].aborted, false);
+    assert.equal(controller.snapshot().sessions[0].interruptions.length, 0);
+  } finally { controller.dispose(); }
+});
+
+test('backgrounding during model preparation or inference does not expire the worker on unlock', async () => {
+  class Visibility extends EventTarget { hidden = false; change(hidden: boolean) { this.hidden = hidden; this.dispatchEvent(new Event('visibilitychange')); } }
+  const visibility = new Visibility(), worker = new FakeWorker(), taps: FakeTap[] = [];
+  const controller = new TranscriptionController({ visibility, worker: () => worker, loadTimeout: 25, jobTimeout: 25,
+    tap: callbacks => { const tap = new FakeTap(callbacks); taps.push(tap); return tap; } });
+  try {
+    controller.load(); visibility.change(true); await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(controller.snapshot().modelStatus, 'loading'); assert.equal(worker.terminated, false);
+    worker.reply({ type: 'ready', ms: 1 }); visibility.change(false);
+    const capture = controller.beginCapture('phone', 'mic')!; controller.activateCapture();
+    taps[0].emit(1); visibility.change(true); await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(controller.snapshot().modelStatus, 'ready'); assert.equal(controller.snapshot().queueDepth, 1);
+    visibility.change(false); worker.result('Preserved result'); await capture.finish();
+    assert.equal(sessionText(controller.snapshot().sessions[0]), 'Preserved result');
+    assert.equal(controller.snapshot().sessions[0].incomplete, ''); assert.equal(worker.terminated, false);
   } finally { controller.dispose(); }
 });

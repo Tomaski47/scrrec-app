@@ -1728,6 +1728,7 @@ function App() {
                         setTranscriptionEnabled(false);
                         transcriptionRef.current?.unload('Speech model unloaded. Existing text is kept.');
                       }}
+                      resume={() => transcriptionRef.current?.resumeCapture()}
                     />
                   </div>
                 </div>

@@ -38,6 +38,12 @@ export class Segmenter {
   private voiced = 0;
   private emit: (segment: Segment) => void;
   constructor(emit: (segment: Segment) => void) { this.emit = emit; }
+  get elapsedSeconds() { return this.clock / SAMPLE_RATE; }
+  /** A missing interval starts a new utterance; never overlap across a gap. */
+  skipTo(seconds: number) {
+    this.flush(); this.preRoll = [];
+    this.clock = Math.max(this.clock, Math.round(seconds * SAMPLE_RATE));
+  }
   push(block: Float32Array) {
     // Worklet blocks are small; split further so gating does not depend on their size.
     for (let offset = 0; offset < block.length; offset += 320) {

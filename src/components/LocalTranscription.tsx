@@ -4,12 +4,13 @@ import { MODELS, RETIRED_MODELS } from '../transcription/protocol';
 import { TranscriptionLicenses } from './TranscriptionLicenses';
 import './LocalTranscription.css';
 
-interface Props { enabled: boolean; setEnabled: (enabled: boolean) => void; recording: boolean; hasMic: boolean; speech: SpeechSnapshot; prepare: () => void; unload: () => void }
-export function LocalTranscription({ enabled, setEnabled, recording, hasMic, speech, prepare, unload }: Props) {
+interface Props { enabled: boolean; setEnabled: (enabled: boolean) => void; recording: boolean; hasMic: boolean; speech: SpeechSnapshot; prepare: () => void; unload: () => void; resume: () => void }
+export function LocalTranscription({ enabled, setEnabled, recording, hasMic, speech, prepare, unload, resume }: Props) {
   const [cacheMessage, setCacheMessage] = useState('');
   const [removing, setRemoving] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const panelId = useId();
+  const paused = recording && enabled && speech.sessions.some(session => session.capturing && session.paused);
   const modelLabel = speech.modelStatus === 'ready' ? 'Loaded' : speech.modelStatus === 'loading' ? 'Loading' : speech.modelStatus === 'error' ? 'Error' : 'Not loaded';
   const removeCache = async () => {
     unload();
@@ -57,7 +58,7 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
             <li><strong>Speech model:</strong> <a href={`https://huggingface.co/${MODELS.tiny.id}`} target="_blank" rel="noreferrer">Whisper Tiny (English)</a> <span className="speech-model-id">{MODELS.tiny.id}</span></li>
             <li><strong>First download:</strong> About 60 MB from Hugging Face, cached on this device when available.</li>
             <li><strong>Model controls:</strong> Unload frees memory. Remove also deletes its cached download.</li>
-            <li><strong>On iPhone/iPad:</strong> Switching apps or locking the screen may interrupt transcription.</li>
+            <li><strong>On iPhone/iPad:</strong> Locking the screen may pause transcription. On return, it tries to resume; if needed, tap Resume transcription. Missed speech is marked and is not filled in automatically.</li>
             <li><strong>Your text:</strong> Review important details and save recordings and transcripts before closing this tab.</li>
           </ul>
           <TranscriptionLicenses />
@@ -65,6 +66,11 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
         {cacheMessage && <p className="speech-cache-message speech-footnote" role="status">{cacheMessage}</p>}
       </div>
     </section>
+    {paused && <div className="speech-interruption" role="status">
+      <p>Transcription paused. Resume after unlocking. Check the saved recording for any missing audio.</p>
+      <button className="mini-action" onClick={resume}>Resume transcription</button>
+    </div>}
+    {recording && enabled && speech.modelStatus === 'error' && <p className="speech-interruption" role="alert">Transcription stopped. {speech.message}</p>}
   </div>;
 }
 
@@ -86,9 +92,12 @@ function TranscriptCard({ session }: { session: SpeechSession }) {
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
   };
   return <article className="local-transcription transcript-card" id={`transcript-${session.id}`}>
-    <div className="speech-title"><h3>Session transcript</h3><span>{session.incomplete ? 'Incomplete' : session.finished ? 'Finished' : session.capturing ? 'Listening' : 'Finishing…'}</span></div>
+    <div className="speech-title"><h3>Session transcript</h3><span>{session.paused ? 'Paused' : session.capturing ? 'Listening' : session.incomplete ? 'Incomplete' : session.finished ? 'Finished' : 'Finishing…'}</span></div>
     <p>{new Date(session.createdAt).toLocaleString()} · {session.source}</p>
     {session.incomplete && <p role="status">{session.incomplete}</p>}
+    {session.interruptions.length > 0 && <ul className="speech-gap-list" aria-label="Transcription interruptions">
+      {session.interruptions.map((gap, index) => <li key={index}>{time(gap.start)}{gap.end === undefined ? ' onward' : `–${time(gap.end)}`} · Speech may be missing.</li>)}
+    </ul>}
     <div className="transcript-text" ref={textRef} onScroll={event => {
       const text = event.currentTarget;
       follow.current = text.scrollHeight - text.clientHeight - text.scrollTop < 60;

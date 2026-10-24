@@ -1,11 +1,13 @@
 import { BoundedQueue } from './audio.ts';
 import { TranscriptAssembler, type TranscriptBlock } from './assembler.ts';
-import { MicrophoneTap, type CaptureTap, type TapCallbacks } from './capture.ts';
+import { MicrophoneTap, type CaptureInterruption, type CaptureTap, type TapCallbacks } from './capture.ts';
+import { ForegroundDeadline, type Visibility } from './deadline.ts';
 import { MODELS, type Device, type Model, type Request, type Response, type Segment } from './protocol.ts';
 
 export interface SpeechSession {
   id: string; createdAt: string; source: string; capturing: boolean; finished: boolean;
   incomplete: string; blocks: readonly TranscriptBlock[]; draft: string;
+  paused: boolean; interruptions: CaptureInterruption[];
   model: typeof MODELS[Model]; device: Device; revision: string;
   stats: { windows: number; retries: number; inferenceMs: number; maxQueue: number; maxWorkingWords: number; contextRate: number };
 }
@@ -22,6 +24,7 @@ interface EngineWorker {
 interface Options {
   worker?: () => EngineWorker; tap?: (callbacks: TapCallbacks) => CaptureTap;
   revision?: string; loadTimeout?: number; jobTimeout?: number;
+  visibility?: Visibility;
 }
 interface Job extends Segment { sessionId: string }
 interface Entry { view: SpeechSession; assembler: TranscriptAssembler; pending: number; ended: boolean; activated: boolean }
@@ -34,7 +37,7 @@ export class TranscriptionController {
   private options: Options;
   private worker: EngineWorker | undefined;
   private queue: BoundedQueue<Job> | undefined;
-  private timeout: ReturnType<typeof setTimeout> | undefined;
+  private deadline: ForegroundDeadline;
   private listeners = new Set<(state: SpeechSnapshot) => void>();
   private entries = new Map<string, Entry>();
   private active: { id: string; tap: CaptureTap } | undefined;
@@ -44,7 +47,7 @@ export class TranscriptionController {
   private status: SpeechSnapshot['modelStatus'] = 'unloaded';
   private message = '';
 
-  constructor(options: Options = {}) { this.options = options; }
+  constructor(options: Options = {}) { this.options = options; this.deadline = new ForegroundDeadline(options.visibility); }
   subscribe(listener: (state: SpeechSnapshot) => void) {
     this.listeners.add(listener); listener(this.snapshot());
     return () => { this.listeners.delete(listener); };
@@ -52,7 +55,7 @@ export class TranscriptionController {
   snapshot(): SpeechSnapshot {
     return { modelStatus: this.status, message: this.message, queueDepth: this.queue?.depth ?? 0,
       canStartCapture: this.status === 'ready' && !this.active && (!!this.queue?.accepting || !this.queue?.depth),
-      sessions: [...this.entries.values()].map(({ view, assembler }) => ({ ...view, stats: { ...view.stats }, blocks: [...assembler.blocks], draft: assembler.draftText })) };
+      sessions: [...this.entries.values()].map(({ view, assembler }) => ({ ...view, interruptions: view.interruptions.map(gap => ({ ...gap })), stats: { ...view.stats }, blocks: [...assembler.blocks], draft: assembler.draftText })) };
   }
   private publish() { const state = this.snapshot(); this.listeners.forEach(listener => listener(state)); }
   private settle(entry: Entry) {
@@ -60,7 +63,7 @@ export class TranscriptionController {
   }
   private makeQueue() {
     this.queue = new BoundedQueue<Job>(job => {
-      this.timeout = setTimeout(() => this.fail('Speech processing took too long. Save the recording; this transcript may be incomplete.'), this.options.jobTimeout ?? 90_000);
+      this.deadline.set(this.options.jobTimeout ?? 90_000, () => this.fail('Speech processing took too long. Save the recording; this transcript may be incomplete.'));
       try { this.worker!.postMessage({ type: 'transcribe', id: job.id, audio: job.audio, overlap: job.overlap }, [job.audio.buffer]); }
       catch (error) { this.fail(`Speech processing failed: ${String(error)} Recording continues.`); }
     }, () => this.stopTap('Transcription fell behind. This transcript is incomplete; recording continues.'));
@@ -71,20 +74,20 @@ export class TranscriptionController {
     try {
       const worker = this.worker = this.options.worker?.() ?? new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
       this.makeQueue();
-      this.timeout = setTimeout(() => this.fail('Model loading timed out. Recording is still available.'), this.options.loadTimeout ?? 180_000);
+      this.deadline.set(this.options.loadTimeout ?? 180_000, () => this.fail('Model loading timed out. Recording is still available.'));
       worker.onerror = event => { if (this.worker === worker) this.fail(event.message || 'Speech engine failed.'); };
       worker.onmessage = ({ data }) => {
         if (this.worker !== worker) return;
         if (data.type === 'progress') this.message = 'Preparing transcription. Downloaded files will be reused when available.';
         else if (data.type === 'ready') {
-          clearTimeout(this.timeout); this.status = 'ready'; this.message = '';
+          this.deadline.clear(); this.status = 'ready'; this.message = '';
         } else if (data.type === 'error') { this.fail(data.message); return; }
         else {
           // Ignore stale/unexpected responses without clearing another job's timer.
           const queue = this.queue;
           const job = queue?.active;
           if (!queue || !job || job.id !== data.id) return;
-          clearTimeout(this.timeout);
+          this.deadline.clear();
           const entry = this.entries.get(job.sessionId);
           if (entry) {
             entry.pending--;
@@ -107,7 +110,7 @@ export class TranscriptionController {
     }
     if (!this.queue?.accepting) this.makeQueue();
     const entry: Entry = { assembler: new TranscriptAssembler(), pending: 0, ended: false, activated: false,
-      view: { id, createdAt: new Date().toISOString(), source, capturing: false, finished: false, incomplete: '', blocks: [], draft: '',
+      view: { id, createdAt: new Date().toISOString(), source, capturing: false, finished: false, incomplete: '', blocks: [], draft: '', paused: false, interruptions: [],
         model: MODELS[this.model], device: this.device, revision: this.options.revision ?? 'local',
         stats: { windows: 0, retries: 0, inferenceMs: 0, maxQueue: 0, maxWorkingWords: 0, contextRate: 0 } } };
     this.entries.set(id, entry);
@@ -123,18 +126,30 @@ export class TranscriptionController {
         },
         rate: rate => { entry.view.stats.contextRate = rate; },
         failure: message => { if (this.active?.id === id) this.stopTap(message); },
+        interruption: (gap, resumed) => {
+          if (this.active?.id !== id || entry.ended) return;
+          const last = entry.view.interruptions.at(-1);
+          if (last && last.start === gap.start && last.end === undefined) entry.view.interruptions[entry.view.interruptions.length - 1] = gap;
+          else entry.view.interruptions.push(gap);
+          entry.view.paused = gap.end === undefined;
+          entry.view.incomplete = 'Audio processing was interrupted. Some speech may be missing; check the saved recording.';
+          this.message = resumed ? 'Transcription resumed. The interrupted interval is marked in your transcript.' : 'Transcription paused. Resume after unlocking your device.';
+          this.publish();
+        },
       };
       const tap = this.options.tap?.(callbacks) ?? new MicrophoneTap(callbacks);
       this.active = { id, tap }; this.message = 'Transcription will start with your recording.'; this.publish();
       let finished = false;
       return {
-        attach: streams => tap.attach(streams), activate: () => this.activateCapture(), abort: () => this.stopTap('Transcription stopped; recording continues.'),
+        attach: streams => tap.attach(streams), activate: () => { if (this.active?.id === id) this.activateCapture(); },
+        abort: () => { if (this.active?.id === id) this.stopTap('Transcription stopped; recording continues.'); },
+        resume: () => { if (this.active?.id === id) tap.resume?.(); },
         finish: async () => {
           if (finished) return; finished = true;
           try { await tap.finish(); }
           catch { entry.view.incomplete = 'Transcription could not finish. The recording is kept separately.'; tap.abort(); }
           if (this.active?.id === id) this.active = undefined;
-          entry.ended = true; entry.view.capturing = false;
+          entry.ended = true; entry.view.capturing = false; entry.view.paused = false;
           if (!entry.view.incomplete) this.message = '';
           if (!entry.activated && !entry.pending) this.entries.delete(id);
           else this.settle(entry);
@@ -149,20 +164,22 @@ export class TranscriptionController {
     if (!this.active) return;
     const entry = this.entries.get(this.active.id)!;
     entry.activated = true; entry.view.capturing = true; entry.view.createdAt = new Date().toISOString();
-    this.active.tap.activate(); this.message = 'Listening for speech.'; this.publish();
+    this.message = 'Listening for speech.'; this.active.tap.activate(); this.publish();
   }
+  resumeCapture() { this.active?.tap.resume?.(); }
   stopCapture() { this.stopTap('Transcription stopped. Existing text is kept; recording continues.'); }
   private stopTap(message: string) {
     if (this.active) {
       const entry = this.entries.get(this.active.id)!;
+      this.active.tap.abort();
       entry.view.incomplete = message; entry.view.capturing = false; entry.ended = true;
-      this.active.tap.abort(); this.active = undefined; this.settle(entry);
+      entry.view.paused = false; this.active = undefined; this.settle(entry);
     }
     this.message = message; this.publish();
   }
   private fail(message: string) { this.unload(message); this.status = 'error'; this.publish(); }
   unload(reason = 'Transcription stopped. Existing text is kept; recording continues.') {
-    clearTimeout(this.timeout); this.worker?.terminate(); this.worker = undefined;
+    this.deadline.clear(); this.worker?.terminate(); this.worker = undefined;
     this.stopTap(reason); this.queue = undefined; this.status = 'unloaded';
     for (const entry of this.entries.values()) if (!entry.view.finished) {
       entry.view.incomplete = reason; entry.ended = true; entry.pending = 0; this.settle(entry);
@@ -170,5 +187,5 @@ export class TranscriptionController {
     this.publish();
   }
   clear() { this.unload(); this.entries.clear(); this.publish(); }
-  dispose() { this.listeners.clear(); this.unload(); }
+  dispose() { this.listeners.clear(); this.unload(); this.deadline.dispose(); }
 }
