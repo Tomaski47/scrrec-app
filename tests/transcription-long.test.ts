@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TranscriptAssembler } from '../src/transcription/assembler.ts';
-import { TranscriptionController, sessionText } from '../src/transcription/controller.ts';
+import { TranscriptionController, sessionExportText, sessionText } from '../src/transcription/controller.ts';
 import type { CaptureTap, TapCallbacks } from '../src/transcription/capture.ts';
 import type { Request, Response, Segment, Word } from '../src/transcription/protocol.ts';
 
@@ -197,6 +197,8 @@ test('an interruption preserves the active session/model, exposes resume and ret
     taps[0].emit(2); worker.result('After unlock'); await capture.finish();
     const session = controller.snapshot().sessions[0];
     assert.equal(sessionText(session), 'Before lock\n\nAfter unlock');
+    assert.equal(sessionExportText(session), '[Possible missing speech: 0:01 to 0:31.]\n\nBefore lock\n\nAfter unlock');
+    assert.match(sessionExportText(paused.sessions[0]), /0:01 onward/);
     assert.equal(session.paused, false); assert.ok(session.finished && session.incomplete);
     assert.deepEqual(session.interruptions, [{ start: 1, end: 31, reason: 'Audio interrupted' }]);
     assert.equal(paused.sessions[0].interruptions[0].end, undefined, 'Published snapshots must not mutate');

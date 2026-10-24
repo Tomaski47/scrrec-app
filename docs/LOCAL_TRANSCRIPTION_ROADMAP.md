@@ -83,6 +83,10 @@ Load models only when the user opts in, with progress, actual download size, cac
 
 Keep transcripts in the tab by default, with explicit export and optional recovery semantics aligned to recording retention. Show which sources are being transcribed and whether results are draft, incomplete, or finished. Do not silently fall back from local transcription to browser/provider speech services. Connecting transcript text to any external assistant is a separate opt-in decision.
 
+## Phone interruption recovery
+
+The v0.3.1 recovery candidate retains the transcription tap across audio interruptions, resumes on return or a user gesture, and marks possible gaps in UI and exports. [Recovery evidence](experiments/TRANSCRIPTION_INTERRUPTION_RECOVERY.md) includes native-context and real-model browser checks; it does not establish physical-iPhone screen-off endurance. Next prioritize catch-up from saved microphone audio so speech recorded while recognition is suspended can be processed after unlock or Stop. Use bounded decoding and explicit coverage; never imply recovery of audio the browser failed to record.
+
 ## Separate audio-capture follow-up
 
 Keep microphone routing unchanged during transcription UX work. Microphone pickup of speakers is different from directly acquiring a tab/system audio track. Historical code requested display audio in May 2025; the May 31 source-picker rewrite (`8c884a9`) removed that request without a documented rationale. This predates the reliability release. Revisit direct audio in an isolated experiment: verify offered browser/OS/source combinations, missing-track feedback, actual recorded output, mixing with the microphone, echo/duplication, headphones, and cleanup before changing the recorder default.

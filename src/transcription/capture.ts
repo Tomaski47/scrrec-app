@@ -37,6 +37,7 @@ export class MicrophoneTap implements CaptureTap {
   private segmenter: Segmenter;
   private active = false;
   private closed = false;
+  private ending = false;
   private tap: AudioWorkletNode | undefined;
   private nodes: AudioNode[] = [];
   private flushed: (() => void) | undefined;
@@ -60,7 +61,7 @@ export class MicrophoneTap implements CaptureTap {
     this.resumed = this.context.resume().then(() => true, () => false);
     this.segmenter = new Segmenter(segment => { if (!this.closed) callbacks.segment(segment); });
     this.context.onstatechange = () => {
-      if (!this.active || this.closed) return;
+      if (!this.active || this.closed || this.ending) return;
       if (this.context.state === 'closed') callbacks.failure('Audio processing closed. Existing text is kept; recording is managed separately.');
       else if (this.context.state !== 'running') this.pause();
       else this.resume();
@@ -86,7 +87,7 @@ export class MicrophoneTap implements CaptureTap {
       tap.port.onmessage = ({ data }) => {
         if (data === 'flushed') { this.flushed?.(); return; }
         if (!this.active || this.closed || this.context.state !== 'running' || this.muted()) return;
-        if (this.interruption) this.closeGap(true);
+        if (this.interruption) this.closeGap(!this.ending);
         this.lastAudioAt = this.now();
         this.segmenter.push(this.resampler!.push(data));
       };
@@ -111,14 +112,14 @@ export class MicrophoneTap implements CaptureTap {
   }
 
   activate() {
-    if (this.closed) return;
+    if (this.closed || this.active || this.ending) return;
     this.active = true;
     this.lastAudioAt = this.now();
     // The worklet discards acquisition/picker audio before MediaRecorder starts.
     this.tap?.port.postMessage('start');
     if (this.context.state !== 'running' || this.muted()) this.pause();
     this.heartbeat = setInterval(() => {
-      if (this.closed || !this.active || this.interruption) return;
+      if (this.closed || this.ending || !this.active || this.interruption) return;
       if (this.now() - this.lastAudioAt > 3000) { this.pause(); this.resume(); }
     }, 1500);
   }
@@ -146,7 +147,7 @@ export class MicrophoneTap implements CaptureTap {
   }
 
   resume() {
-    if (!this.active || this.closed || this.resuming || this.muted()) return;
+    if (!this.active || this.closed || this.ending || this.resuming || this.muted()) return;
     if (this.now() - this.lastAudioAt > 3000) this.pause();
     if ((this.environment.visibility ?? globalThis.document)?.hidden) return;
     if (!this.interruption && this.context.state === 'running') return;
@@ -154,13 +155,15 @@ export class MicrophoneTap implements CaptureTap {
     // Resume the existing tap only. Never acquire a microphone or touch the
     // MediaRecorder streams. Some Safari interruptions need a user gesture.
     void bounded(this.context.resume(), 2500).then(() => {
-      if (!this.closed && this.active && this.context.state === 'running') this.tap?.port.postMessage('start');
+      if (!this.closed && !this.ending && this.active && this.context.state === 'running') this.tap?.port.postMessage('start');
     }).catch(() => { /* Stay paused; the visible Resume button permits a gesture. */ })
       .finally(() => { this.resuming = false; });
   }
 
   finish(): Promise<void> {
     if (this.finishing) return this.finishing;
+    this.ending = true;
+    clearInterval(this.heartbeat);
     this.finishing = (async () => {
       if (this.active && !this.closed) {
         await Promise.race([
@@ -177,6 +180,7 @@ export class MicrophoneTap implements CaptureTap {
 
   abort() {
     if (this.closed) return;
+    this.ending = true;
     this.closeGap(false);
     this.closed = true; this.active = false;
     clearInterval(this.heartbeat);

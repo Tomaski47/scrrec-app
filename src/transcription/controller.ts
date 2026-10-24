@@ -31,6 +31,12 @@ interface Entry { view: SpeechSession; assembler: TranscriptAssembler; pending: 
 
 export const emptySpeech: SpeechSnapshot = { modelStatus: 'unloaded', message: '', canStartCapture: false, queueDepth: 0, sessions: [] };
 export const sessionText = (session: SpeechSession) => (session.blocks.map(block => block.text).join('') + session.draft).trim();
+/** Plain-text copies must not make an interrupted transcript look complete. */
+export function sessionExportText(session: SpeechSession) {
+  const time = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+  const gaps = session.interruptions.map(gap => `[Possible missing speech: ${time(gap.start)}${gap.end === undefined ? ' onward' : ` to ${time(gap.end)}`}.]`).join('\n');
+  return gaps ? `${gaps}\n\n${sessionText(session)}`.trim() : sessionText(session);
+}
 
 /** The optional engine owns its worker and PCM tap, never recording tracks. */
 export class TranscriptionController {
@@ -133,7 +139,9 @@ export class TranscriptionController {
           else entry.view.interruptions.push(gap);
           entry.view.paused = gap.end === undefined;
           entry.view.incomplete = 'Audio processing was interrupted. Some speech may be missing; check the saved recording.';
-          this.message = resumed ? 'Transcription resumed. The interrupted interval is marked in your transcript.' : 'Transcription paused. Resume after unlocking your device.';
+          this.message = resumed ? 'Transcription resumed. The interrupted interval is marked in your transcript.'
+            : gap.end === undefined ? 'Transcription paused. Resume after unlocking your device.'
+              : 'Transcription ended with an interrupted interval. Check the saved recording for missing speech.';
           this.publish();
         },
       };

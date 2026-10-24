@@ -17,11 +17,13 @@ class ContextFake {
   state = 'running'; sampleRate = 48000; resumes = 0; closes = 0; denied = false;
   onstatechange: (() => void) | null = null;
   destination = new AudioNodeFake();
+  resumeBarrier: Promise<void> | undefined;
   audioWorklet = { addModule: async () => undefined };
   change(state: string) { this.state = state; this.onstatechange?.(); }
   async resume() {
     this.resumes++;
     if (this.denied) throw new Error('User gesture required');
+    if (this.resumeBarrier) await this.resumeBarrier;
     this.change('running');
   }
   async close() { this.closes++; this.change('closed'); }
@@ -132,4 +134,20 @@ test('speech deadlines pause while hidden, restart on return and still expire fo
     deadline.set(25, () => failures++); deadline.clear(); visibility.set(true); visibility.set(false);
     await new Promise(resolve => setTimeout(resolve, 50)); assert.equal(failures, 1);
   } finally { deadline.dispose(); }
+});
+
+test('a pending resume cannot restart the worklet after Stop, and activation is idempotent', async () => {
+  const s = setup();
+  try {
+    await s.attach(); s.tap.activate(); s.tap.activate(); s.time(500); s.audio();
+    s.context.change('interrupted');
+    let release!: () => void;
+    s.context.resumeBarrier = new Promise<void>(resolve => { release = resolve; });
+    s.tap.resume();
+    const finished = s.tap.finish();
+    release(); await tick(); await finished;
+    assert.equal(s.messages.filter(message => message === 'start').length, 1);
+    assert.equal(s.context.closes, 1); assert.equal(s.track.stops, 0);
+    assert.equal(s.gaps.at(-1)?.resumed, false);
+  } finally { s.tap.abort(); }
 });

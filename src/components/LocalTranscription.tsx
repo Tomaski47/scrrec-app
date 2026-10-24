@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { sessionText, type SpeechSession, type SpeechSnapshot } from '../transcription/controller';
+import { sessionExportText, type SpeechSession, type SpeechSnapshot } from '../transcription/controller';
 import { MODELS, RETIRED_MODELS } from '../transcription/protocol';
 import { TranscriptionLicenses } from './TranscriptionLicenses';
 import './LocalTranscription.css';
@@ -51,7 +51,7 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
               : <button className="mini-action" disabled={recording || removing} onClick={prepare}>{speech.modelStatus === 'error' ? 'Retry preparation' : 'Load model'}</button>}
           {!recording && <button className="mini-action" disabled={removing} onClick={() => void removeCache()}>Remove model</button>}
         </div>
-        {speech.message && (speech.modelStatus === 'error' || (speech.modelStatus === 'ready' && (enabled || recording))) && <p className={`speech-status${speech.modelStatus === 'error' ? ' speech-warning' : ''}`} role={speech.modelStatus === 'error' ? 'alert' : 'status'}>{speech.message}</p>}
+        {speech.message && ((speech.modelStatus === 'error' && !recording) || (speech.modelStatus === 'ready' && (enabled || recording))) && <p className={`speech-status${speech.modelStatus === 'error' ? ' speech-warning' : ''}`} role={speech.modelStatus === 'error' ? 'alert' : 'status'}>{speech.message}</p>}
         <details className="speech-info">
           <summary>About transcription</summary>
           <ul className="speech-details-list">
@@ -85,7 +85,7 @@ function TranscriptCard({ session }: { session: SpeechSession }) {
     if (text && follow.current) text.scrollTop = text.scrollHeight;
   }, [session.blocks, session.draft]);
   const download = (json: boolean) => {
-    const body = json ? JSON.stringify({ ...session, runtime: 'transformers.js 4.3.0', text: sessionText(session) }, null, 2) : sessionText(session);
+    const body = json ? JSON.stringify({ ...session, runtime: 'transformers.js 4.3.0', text: sessionExportText(session) }, null, 2) : sessionExportText(session);
     const url = URL.createObjectURL(new Blob([body], { type: json ? 'application/json' : 'text/plain;charset=utf-8' }));
     const anchor = document.createElement('a'); anchor.href = url;
     anchor.download = `transcript-${session.createdAt.replace(/[:.]/g, '-')}.${json ? 'json' : 'txt'}`; anchor.click();
@@ -110,7 +110,7 @@ function TranscriptCard({ session }: { session: SpeechSession }) {
     <div className="speech-actions">
       <button className="mini-action" onClick={() => {
         if (!navigator.clipboard?.writeText) { setFeedback('Copy unavailable. Use Save TXT.'); return; }
-        void navigator.clipboard.writeText(sessionText(session)).then(() => setFeedback('Copied.'), () => setFeedback('Copy unavailable. Use Save TXT.'));
+        void navigator.clipboard.writeText(sessionExportText(session)).then(() => setFeedback('Copied.'), () => setFeedback('Copy unavailable. Use Save TXT.'));
       }}>Copy text</button>
       <button className="mini-action" onClick={() => download(false)}>Save TXT</button>
       <button className="mini-action" onClick={() => download(true)}>Save JSON</button>
