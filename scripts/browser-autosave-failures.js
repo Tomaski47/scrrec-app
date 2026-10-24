@@ -2,7 +2,7 @@ async(page)=>{
  if(!/^http:\/\/(localhost|127\.0\.0\.1):/.test(page.url()))throw new Error('Localhost only.');
  await page.getByRole('checkbox',{name:'Mic',exact:true}).click();await page.getByRole('button',{name:'Refresh mics',exact:true}).waitFor();
  await page.getByRole('button',{name:'Start Recording',exact:true}).click();await page.locator('.recording-timer').waitFor();
- await page.getByText('Saved in this browser.',{exact:true}).waitFor();
+ await page.waitForFunction(()=>new Promise((resolve,reject)=>{const request=indexedDB.open('scrrec-local-sessions',1);request.onerror=()=>reject(request.error);request.onsuccess=()=>{const db=request.result,tx=db.transaction(['recordings','transcripts'],'readonly'),filesRequest=tx.objectStore('recordings').getAll(); tx.oncomplete=()=>{const files=filesRequest.result; db.close();resolve(files.length>0);};tx.onabort=()=>{db.close();reject(tx.error);};};}));
  await page.evaluate(()=>{window.simulateStorageFull=true;const transact=IDBDatabase.prototype.transaction;IDBDatabase.prototype.transaction=function(stores,mode,...rest){if(window.simulateStorageFull&&mode==='readwrite')throw new DOMException('Generated quota test','QuotaExceededError');return transact.call(this,stores,mode,...rest);};});
  await page.getByText(/Browser storage is full/).first().waitFor({timeout:10000});
  const recordingSurvived=await page.getByRole('button',{name:'Stop Recording',exact:true}).isEnabled();if(!recordingSurvived)throw new Error('Storage failure stopped media');

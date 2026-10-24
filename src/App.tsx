@@ -1306,6 +1306,11 @@ function App() {
                 </ul>
               </section>
               <section>
+                <h2>Local saving</h2>
+                <p>Recordings and transcript updates save automatically in this browser profile on this device and restore when you reopen this page. Clear All removes these saved sessions; Save, Share and transcript exports create separate copies.</p>
+                <p>Incoming recording chunks are saved as the browser delivers them. Closing the page stops capture; an interrupted recording returns as partial and may be missing its final portion or be unplayable. Browser storage limits, private browsing or clearing site data can remove local copies. Download anything you want to keep separately.</p>
+              </section>
+              <section>
                 <h2>Stack</h2>
                 <ul>
                   {stackDetails.map(item => (
@@ -1802,13 +1807,9 @@ function App() {
               {recordingSize > 500 * 1024 ** 2 && ' — Large recording. Stop and save soon to reduce memory pressure.'}
             </div>
           </>}
-          <div className={`local-save-status${archiveStatus.error ? ' local-save-error' : ''}`} role={archiveStatus.error ? 'alert' : 'status'} aria-live="polite">
-            <p>{archiveStatus.error || (!archiveStatus.ready ? 'Restoring locally saved sessions…' : archiveStatus.clearing ? 'Clearing local sessions…' : archiveStatus.pending ? 'Saving locally…' : archiveStatus.lastSaved ? 'Saved in this browser.' : 'Recordings and transcripts save automatically in this browser.')}</p>
-            {archiveStatus.ready && !archiveStatus.error && <details><summary>About local saving</summary>
-              <p>Finished recordings and transcript updates are restored when you reopen this page. During recording, incoming audio/video chunks are saved as the browser delivers them. Closing the page stops capture; an interrupted recording is restored as partial and may be missing its final portion or be unplayable.</p>
-              <p>Copies stay in this browser profile on this device. Browser storage limits or clearing site data can remove them. Use Save or Share for a separate copy.</p>
-            </details>}
-          </div>
+          {archiveStatus.error && <div className="local-save-status local-save-error" role="alert">
+            <p>{archiveStatus.error}</p>
+          </div>}
           <SessionResults recordings={recordings} transcripts={speech.sessions} currentSessionId={currentSessionId} recording={recording} />
           {(recordings.length > 0 || speech.sessions.length > 0) && <button className="clear-button" disabled={recording || deviceBusy || !archiveStatus.ready || archiveStatus.clearing} onClick={() => setShowClearConfirmation(true)}>Clear All</button>}
           {showClearConfirmation && <Modal title="Clear recordings and transcripts?" onDismiss={() => setShowClearConfirmation(false)}>
