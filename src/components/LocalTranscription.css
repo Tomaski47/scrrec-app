@@ -8,7 +8,7 @@
 .speech-expand svg { flex-shrink: 0; }
 .speech-expand:focus-visible { outline: 3px solid #13cbb4; outline-offset: 1px; }
 .App .recorder-panel .transcription-option button.speech-expand,
-.App .recorder-panel .transcription-option button.speech-expand:hover { min-width: 0; background: transparent; box-shadow: none; transform: none; }
+.App .recorder-panel .transcription-option button.speech-expand:hover { min-width: 0; color: inherit; background: transparent; box-shadow: none; transform: none; }
 .transcription-option [hidden] { display: none !important; }
 .speech-setup p, .transcript-card > p { font-size: .9rem; line-height: 1.6; margin: .8rem 0; }
 .speech-actions { display: flex; flex-wrap: wrap; gap: .65rem; }

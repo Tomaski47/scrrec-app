@@ -59,7 +59,7 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
             <li><strong>First download:</strong> About 60 MB from Hugging Face, cached on this device when available.</li>
             <li><strong>Model controls:</strong> Unload frees memory. Remove also deletes its cached download.</li>
             <li><strong>On iPhone/iPad:</strong> Switching apps or locking the screen may interrupt transcription. It tries to resume automatically; if needed, return here and tap Resume transcription. Possible missing speech is marked.</li>
-            <li><strong>Your text:</strong> Review important details and save recordings and transcripts before closing this tab.</li>
+            <li><strong>Your text:</strong> Transcript updates save automatically in this browser. Review important details and export a separate copy when needed. Clear All removes saved sessions.</li>
           </ul>
           <TranscriptionLicenses />
         </details>
@@ -104,7 +104,7 @@ function TranscriptCard({ session }: { session: SpeechSession }) {
     }}>
       {session.blocks.length > visible && <button className="mini-action" onClick={() => { follow.current = false; setVisible(value => value + 20); }}>Show earlier paragraphs</button>}
       {session.blocks.slice(-visible).map(block => <p key={block.id}><span className="speech-time">{time(block.start)}{(block.boundaryReview || block.recognitionReview) && ' · review'}</span>{block.text.trim()}</p>)}
-      {session.draft && <p className="speech-draft"><span className="speech-time">Draft ending · may change</span>{session.draft}</p>}
+      {session.draft && <p className="speech-draft"><span className="speech-time">{session.restored ? 'Saved draft ending' : 'Draft ending · may change'}</span>{session.draft}</p>}
       {!session.blocks.length && !session.draft && <p>Text appears after a phrase or about 12 seconds of continuous speech.</p>}
     </div>
     <div className="speech-actions">

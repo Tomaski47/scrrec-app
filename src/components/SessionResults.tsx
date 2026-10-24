@@ -53,7 +53,7 @@ function RecordingCard({ recording, sharing }: { recording: CompletedRecording; 
     <article className="recording-card">
       <h3>{recording.label}</h3>
       <p className="recording-metadata">{recording.createdAt.toLocaleString()} · {Math.round(recording.duration)}s · {(recording.blob.size / 1024 / 1024).toFixed(2)} MB · {recording.blob.type.split(';')[0] || 'Browser format'}</p>
-      {recording.partial && <p role="status">Partial recording — check playback before relying on this file.</p>}
+      {recording.partial && <p role="status">Partial recording. The final portion may be missing or unplayable; check playback before relying on this file.</p>}
       {recording.kind === 'mic'
         ? <audio src={recording.url} controls aria-label={`${recording.label} playback`} />
         : <video src={recording.url} controls playsInline aria-label={`${recording.label} playback`}
@@ -108,7 +108,6 @@ export function SessionResults({ recordings, transcripts, currentSessionId, reco
   </section>;
   if (!groups.size) return null;
   return <section className="session-results" aria-label="Recordings and transcripts">
-    <p className="session-retention">Kept in this tab until you clear or close it. Save anything you want to keep.</p>
     {active !== null && !recordings.some(file => file.id === active) && <p role="status" className="save-feedback">Your browser still has a share pending. Use Save for these files. Save all recordings before reloading this tab.</p>}
     {current && render(current, true)}
     {previous.length > 0 && <details className="session-history" key={`history-${current?.id ?? currentSessionId}`}>

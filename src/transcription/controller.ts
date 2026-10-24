@@ -8,6 +8,7 @@ export interface SpeechSession {
   id: string; createdAt: string; source: string; capturing: boolean; finished: boolean;
   incomplete: string; blocks: readonly TranscriptBlock[]; draft: string;
   paused: boolean; interruptions: CaptureInterruption[];
+  restored?: boolean;
   model: typeof MODELS[Model]; device: Device; revision: string;
   stats: { windows: number; retries: number; inferenceMs: number; maxQueue: number; maxWorkingWords: number; contextRate: number };
 }
@@ -35,7 +36,9 @@ export const sessionText = (session: SpeechSession) => (session.blocks.map(block
 export function sessionExportText(session: SpeechSession) {
   const time = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
   const gaps = session.interruptions.map(gap => `[Possible missing speech: ${time(gap.start)}${gap.end === undefined ? ' onward' : ` to ${time(gap.end)}`}.]`).join('\n');
-  return gaps ? `${gaps}\n\n${sessionText(session)}`.trim() : sessionText(session);
+  const recovery = session.restored && session.incomplete ? `[Recovered transcript: ${session.incomplete}]` : '';
+  const notices = [recovery, gaps].filter(Boolean).join('\n');
+  return notices ? `${notices}\n\n${sessionText(session)}`.trim() : sessionText(session);
 }
 
 /** The optional engine owns its worker and PCM tap, never recording tracks. */
@@ -46,6 +49,7 @@ export class TranscriptionController {
   private deadline: ForegroundDeadline;
   private listeners = new Set<(state: SpeechSnapshot) => void>();
   private entries = new Map<string, Entry>();
+  private restored = new Map<string, SpeechSession>();
   private active: { id: string; tap: CaptureTap } | undefined;
   private sequence = 0;
   private model: Model = 'tiny';
@@ -61,7 +65,17 @@ export class TranscriptionController {
   snapshot(): SpeechSnapshot {
     return { modelStatus: this.status, message: this.message, queueDepth: this.queue?.depth ?? 0,
       canStartCapture: this.status === 'ready' && !this.active && (!!this.queue?.accepting || !this.queue?.depth),
-      sessions: [...this.entries.values()].map(({ view, assembler }) => ({ ...view, interruptions: view.interruptions.map(gap => ({ ...gap })), stats: { ...view.stats }, blocks: [...assembler.blocks], draft: assembler.draftText })) };
+      sessions: [...this.restored.values(), ...[...this.entries.values()].map(({ view, assembler }) => ({ ...view, interruptions: view.interruptions.map(gap => ({ ...gap })), stats: { ...view.stats }, blocks: [...assembler.blocks], draft: assembler.draftText }))] };
+  }
+  restore(sessions: SpeechSession[]) {
+    for (const session of sessions) {
+      if (this.entries.has(session.id) || this.restored.has(session.id)) continue;
+      this.restored.set(session.id, { ...session, restored: true, capturing: false, paused: false, finished: true,
+        incomplete: !session.finished || session.capturing
+          ? [session.incomplete, 'Recovered after the page closed. Final speech may be missing; recording and transcription must be started again.'].filter(Boolean).join(' ')
+          : session.incomplete });
+    }
+    this.publish();
   }
   private publish() { const state = this.snapshot(); this.listeners.forEach(listener => listener(state)); }
   private settle(entry: Entry) {
@@ -194,6 +208,6 @@ export class TranscriptionController {
     }
     this.publish();
   }
-  clear() { this.unload(); this.entries.clear(); this.publish(); }
+  clear() { this.unload(); this.entries.clear(); this.restored.clear(); this.publish(); }
   dispose() { this.listeners.clear(); this.unload(); this.deadline.dispose(); }
 }

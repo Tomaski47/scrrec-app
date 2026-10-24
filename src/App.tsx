@@ -5,6 +5,8 @@ import { Modal } from './components/Modal';
 import { SessionResults } from './components/SessionResults';
 import { LocalTranscription } from './components/LocalTranscription';
 import { useLocalTranscription } from './transcription/useLocalTranscription';
+import { LocalArchive, initialArchiveStatus } from './storage/localArchive';
+import { SessionStore } from './storage/sessionStore';
 import { genericFrontCameraId, genericRearCameraId, genericCameraId, isGenericCameraId, isAppleMobile, requiresSingleCamera, nextCameraIds, cameraChoiceLabels, cameraDescription } from './recorder/cameras';
 
 type WebkitAudioWindow = Window & typeof globalThis & {
@@ -110,11 +112,11 @@ const legalDocuments: Record<LegalDocument, {
 }> = {
   privacy: {
     title: 'Privacy Policy',
-    updated: 'October 22, 2026',
+    updated: 'October 24, 2026',
     sections: [
       {
         heading: 'Overview',
-        body: 'Sadilek Screen Recorder is designed as a browser-based recording tool. Recordings are created through your browser media APIs and are not intentionally uploaded, stored, reviewed, or sold by Sadilek Innovation through this app.',
+        body: 'Sadilek Screen Recorder creates recordings through your browser media APIs and saves local copies on your device. Recordings and transcripts are not uploaded to or stored on Sadilek Innovation servers through this app.',
       },
       {
         heading: 'Information the app may access',
@@ -122,11 +124,11 @@ const legalDocuments: Record<LegalDocument, {
       },
       {
         heading: 'Recordings',
-        body: 'Recorded files remain in your browser session until you choose to save or share them. If you use browser share or download features, your browser, operating system, or selected destination may process that file.',
+        body: 'Finished recordings, incoming recording chunks and transcript updates are saved automatically in this browser profile using IndexedDB. Local copies can survive refreshing or closing the tab. Clear All deletes these saved recordings and transcripts; clearing site data or browser storage eviction can also remove them. Storage limits, private browsing and interrupted writes may prevent saving; the app reports failures. Closing a page during recording can leave a partial or unplayable file. Use Save or Share for a separate copy. Your browser, operating system or selected share destination may process exported files.',
       },
       {
         heading: 'Optional local transcription',
-        body: 'When enabled and prepared, transcription processes the selected microphone audio on your device. Audio and transcript text are not uploaded for recognition. Preparing the feature downloads a speech engine from this site and model files from Hugging Face, which receives normal download request data. Model files may remain in browser caches; choose Remove model in the transcription controls to remove the cached model files used here. Transcript text remains in this tab until cleared or closed. Save it separately from your recordings.',
+        body: 'When enabled and prepared, transcription processes the selected microphone audio on your device. Audio and transcript text are not uploaded for recognition. Preparing the feature downloads a speech engine from this site and model files from Hugging Face, which receives normal download request data. Model files may remain in browser caches; choose Remove model in the transcription controls to remove those cached files. Saved transcripts use separate browser storage and can be removed with Clear All. Restoring a session does not open a microphone, load a speech model or restart recording.',
       },
       {
         heading: 'Site and hosting data',
@@ -199,10 +201,29 @@ const projectTimeline = [
     date: 'June 10, 2026',
     body: 'Functional pass stabilized multi-screen capture, exact microphone selection, input metering, mobile camera fallbacks, and local dev access for desktop and phone testing.',
   },
+  {
+    date: 'October 22, 2026 · v0.2.0',
+    body: 'The open-source reliability release added maintained dependencies, hosted source/container checks, safer capture lifecycles, and Apple MP4 export/share fixes. Validation included a 30-minute combined recording and owner-confirmed three-hour iPhone audio recording.',
+  },
+  {
+    date: 'October 22, 2026 · v0.3.0',
+    body: 'Optional English transcription joined the main recorder using Whisper Tiny, overlapping speech windows, bounded processing, session-associated TXT/JSON exports and model controls. The fixed live two-minute limit was removed.',
+  },
+  {
+    date: 'October 24, 2026 · v0.3.1',
+    body: 'Processing-only audio and recoverable interruptions improved background transcription. The owner confirmed microphone audio and transcript coverage in iPhone Safari while using another app and locking the phone. Recovery previews were retired after deployment.',
+  },
+  {
+    date: 'October 24, 2026 · local-saving update',
+    body: 'Automatic browser-local recording and transcript storage adds restore after refresh/reopen, incremental recording checkpoints, partial-session recovery, clear controls and visible storage failures.',
+  },
 ];
 
 const technicalWins = [
-  'Frontend-only capture flow: files are created in the browser session and saved or shared only when the user chooses.',
+  'Frontend-only capture with automatic browser-local copies. Save and Share create separate exports; recordings and transcript text are not uploaded for storage or recognition.',
+  'Finished recordings and transcripts restore after refresh or reopening. Incoming recording chunks are checkpointed; unfinished sessions return as partial rather than silently appearing complete.',
+  'Optional Whisper Tiny English transcription reuses the selected microphones, with bounded speech processing, timestamped text, TXT/JSON export and model load/unload/remove controls.',
+  'Background microphone transcription uses a processing-only audio graph, recoverable interruptions and explicit missing-speech markers. The owner confirmed app-switch and screen-lock coverage in iPhone Safari.',
   'Separate screen, camera, and mic outputs with per-source save/share actions and generated filenames.',
   'Multiple screen slots can be captured as separate files through repeated browser display-picker prompts.',
   'Microphone capture now keeps OS default, named physical inputs, and browser-default fallback paths distinct so exact device selection stays stable.',
@@ -216,21 +237,24 @@ const stackDetails = [
   'React 18, TypeScript, and Vite 6 for the frontend app shell.',
   'Browser MediaDevices, getDisplayMedia, getUserMedia, and MediaRecorder APIs for capture.',
   'Web Audio API GainNode and AnalyserNode support microphone gain and peak-level metering.',
+  'AudioWorklet PCM capture and a dedicated worker run Whisper Tiny English (Xenova/whisper-tiny.en) through pinned Transformers.js 4.3.0 and ONNX Runtime Web on CPU/WASM.',
+  'IndexedDB stores encoded media blobs/chunks and transcript snapshots. Restore recreates local playback URLs without starting recording or loading the model.',
   'Native Blob, download and Web Share APIs handle local export with the actual recording format.',
-  'Docker and nginx are included for static deployment hosting.',
+  'Node 24, Docker and nginx support the static build; GitHub Actions checks source, dependencies and container behavior before Dokploy deployment.',
   'Custom CSS provides the interface, with PostCSS and Autoprefixer for browser compatibility.',
   'Vite serves localhost on port 5174. Phone testing requires a separately configured secure HTTPS connection.',
 ];
 
 const toolNotes = [
   'Confirmed from repo history: the project began from a Bolt DIY build.',
-  'Recording files are generated on your computer and stay in your browser session until you save or share them.',
+  'Recording files and transcript snapshots are generated and saved locally in your browser. Clear All removes saved sessions; downloads and shared files remain separate copies.',
   'The app is free and open source, built in May 2025 from a Bolt DIY start, refined through June, and finished with a 2026 design pass.',
   'Development notes from this pass: early work used free OpenRouter credits through Bolt DIY, with extra help from ChatGPT through a Cursor/VS Code workflow.',
   'Confirmed from a June 1 commit: a Claude Opus 4 review pass influenced later refinements.',
   'The June 2026 design and functional refresh was edited in Codex through iterative local browser testing.',
+  'October 2026 work in Codex added reliability fixes, local Whisper transcription, iPhone interruption recovery and automatic local session saving. Node tests, fake-indexeddb and Playwright browser checks verify storage and recording behavior.',
   'The repo now tracks known issues and future work for Continuity/iPhone microphones, mobile multi-camera capture, and recording-flow polish.',
-  'Other exact model/editor details are not recorded in this repo, so they are not claimed here.',
+  'Historical assistant/editor choices are listed only when supported by repo history. The current speech engine and model are identified in the stack details.',
 ];
 
 const githubUrl = 'https://github.com/Tomaski47/scrrec-app';
@@ -491,6 +515,8 @@ function App() {
   const [showTranscriptionWarning, setShowTranscriptionWarning] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [recordings, setRecordings] = useState<CompletedRecording[]>([]);
+  const [archiveStatus, setArchiveStatus] = useState(initialArchiveStatus);
+  const archiveRef = useRef<LocalArchive | null>(null);
   const [screenPrompt, setScreenPrompt] = useState<{ label: string; choose: () => void; cancel: () => void } | null>(null);
   const sessionRef = useRef<RecordingSession | null>(null);
   const [supportsDisplayMedia, setSupportsDisplayMedia] = useState(true);
@@ -1018,7 +1044,7 @@ function App() {
 
   const startRecording = (withoutTranscription = false) => {
     const session = sessionRef.current;
-    if (!session || session.state !== 'idle' || deviceOperationsRef.current > 0) return;
+    if (!session || session.state !== 'idle' || deviceOperationsRef.current > 0 || !archiveStatus.ready || archiveStatus.clearing) return;
     if (!window.isSecureContext) {
       setPermissionError('Recording requires a secure connection. Open the HTTPS version of this page using the link below the source controls, then try again.');
       return;
@@ -1107,7 +1133,9 @@ function App() {
   };
 
   const stopRecording = () => { void sessionRef.current?.stop(); };
-  const confirmClear = () => {
+  const confirmClear = async () => {
+    if (recording || archiveStatus.clearing) return;
+    if (!await archiveRef.current?.clear()) return;
     sessionRef.current?.clear();
     transcriptionRef.current?.clear();
     setTranscriptionEnabled(false);
@@ -1165,12 +1193,28 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const base = import.meta.env.BASE_URL;
+    const archive = new LocalArchive(setArchiveStatus, new SessionStore(undefined, base === '/' ? 'scrrec-local-sessions' : `scrrec-preview-sessions:${base}`));
+    archiveRef.current = archive;
+    let cancelled = false;
     const session = new RecordingSession({ state: state => {
       setSessionState(state);
       if (state === 'recording') transcriptionRef.current?.activateCapture();
-    }, recordings: setRecordings, bytes: setRecordingSize, message: setPermissionError }, { preferMP4: isAppleMobile(navigator) });
+    }, recordings: setRecordings, bytes: setRecordingSize, message: setPermissionError,
+    checkpoint: (file, index, blob) => archive.append(file, index, blob), completed: file => archive.complete(file),
+    }, { preferMP4: isAppleMobile(navigator) });
     sessionRef.current = session;
-    return () => { session.dispose(); sessionRef.current = null; };
+    const unsubscribe = transcriptionRef.current?.subscribe(snapshot => archive.saveTranscripts(snapshot.sessions));
+    void archive.load().then(saved => {
+      if (cancelled) return;
+      session.restore(saved.recordings);
+      transcriptionRef.current?.restore(saved.transcripts);
+    });
+    return () => {
+      cancelled = true; unsubscribe?.();
+      const finished = session.stop(); session.dispose(); archive.detach(finished);
+      sessionRef.current = null; archiveRef.current = null;
+    };
   }, [transcriptionRef]);
 
   useEffect(() => {
@@ -1182,11 +1226,13 @@ function App() {
   }, [sessionState]);
 
   useEffect(() => {
-    if (!recording && !recordings.length && !speech.sessions.length) return;
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    const warn = (event: BeforeUnloadEvent) => {
+      archiveRef.current?.flushTranscripts();
+      if (recording || archiveRef.current?.unsaved) { event.preventDefault(); event.returnValue = ''; }
+    };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [recording, recordings.length, speech.sessions.length]);
+  }, [recording]);
 
   const activeLegalDocument = legalModal ? legalDocuments[legalModal] : null;
 
@@ -1738,7 +1784,7 @@ function App() {
 
           <div className="action-buttons">
             {!window.isSecureContext && window.location.protocol === 'http:' && <p role="alert">Recording requires HTTPS. <a href={window.location.href.replace(/^http:/, 'https:')}>Open the secure page</a>.</p>}
-            <button className="btn" onClick={() => startRecording()} disabled={recording || deviceBusy}>Start Recording</button>
+            <button className="btn" onClick={() => startRecording()} disabled={recording || deviceBusy || !archiveStatus.ready || archiveStatus.clearing}>Start Recording</button>
             <button className={recording ? 'neon-stop' : 'btn-disabled'} onClick={stopRecording} disabled={!recording || sessionState === 'stopping'}>
               {sessionState === 'acquiring' ? 'Cancel capture' : 'Stop Recording'}
             </button>
@@ -1756,12 +1802,20 @@ function App() {
               {recordingSize > 500 * 1024 ** 2 && ' — Large recording. Stop and save soon to reduce memory pressure.'}
             </div>
           </>}
+          <div className={`local-save-status${archiveStatus.error ? ' local-save-error' : ''}`} role={archiveStatus.error ? 'alert' : 'status'} aria-live="polite">
+            <p>{archiveStatus.error || (!archiveStatus.ready ? 'Restoring locally saved sessions…' : archiveStatus.clearing ? 'Clearing local sessions…' : archiveStatus.pending ? 'Saving locally…' : archiveStatus.lastSaved ? 'Saved in this browser.' : 'Recordings and transcripts save automatically in this browser.')}</p>
+            {archiveStatus.ready && !archiveStatus.error && <details><summary>About local saving</summary>
+              <p>Finished recordings and transcript updates are restored when you reopen this page. During recording, incoming audio/video chunks are saved as the browser delivers them. Closing the page stops capture; an interrupted recording is restored as partial and may be missing its final portion or be unplayable.</p>
+              <p>Copies stay in this browser profile on this device. Browser storage limits or clearing site data can remove them. Use Save or Share for a separate copy.</p>
+            </details>}
+          </div>
           <SessionResults recordings={recordings} transcripts={speech.sessions} currentSessionId={currentSessionId} recording={recording} />
-          {(recordings.length > 0 || speech.sessions.length > 0) && <button className="clear-button" disabled={recording || deviceBusy} onClick={() => setShowClearConfirmation(true)}>Clear All</button>}
+          {(recordings.length > 0 || speech.sessions.length > 0) && <button className="clear-button" disabled={recording || deviceBusy || !archiveStatus.ready || archiveStatus.clearing} onClick={() => setShowClearConfirmation(true)}>Clear All</button>}
           {showClearConfirmation && <Modal title="Clear recordings and transcripts?" onDismiss={() => setShowClearConfirmation(false)}>
-            <p>This deletes all recordings and transcripts in this tab and unloads the speech model. Check that any files and text you need have finished downloading first.</p>
+            <p>This deletes all recordings and transcripts saved by this app in this browser, clears this tab, and unloads the speech model. Download anything you want to keep first.</p>
+            {archiveStatus.error && <p role="alert">{archiveStatus.error}</p>}
             <div className="popup-buttons">
-              <button className="popup-button confirm" onClick={confirmClear}>Yes</button>
+              <button className="popup-button confirm" disabled={archiveStatus.clearing} onClick={() => void confirmClear()}>Yes</button>
               <button className="popup-button cancel" onClick={() => setShowClearConfirmation(false)}>No</button>
             </div>
           </Modal>}
