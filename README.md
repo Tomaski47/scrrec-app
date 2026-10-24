@@ -1,6 +1,6 @@
 # Screen Recorder
 
-A local-first browser recorder for screen, camera, and microphone capture. The live app is available at [screc.sadilekinnovation.com](https://screc.sadilekinnovation.com/). See [Release 0.3.0](docs/RELEASE_0.3.0.md) for the local transcription update and verification notes. The earlier [v0.2.0](https://github.com/Tomaski47/scrrec-app/releases/tag/v0.2.0) contains the reliability release.
+A local-first browser recorder for screen, camera, and microphone capture. The live app is available at [screc.sadilekinnovation.com](https://screc.sadilekinnovation.com/). See [Release 0.3.1](docs/RELEASE_0.3.1.md) for background transcription and interruption recovery, and [Release 0.3.0](docs/RELEASE_0.3.0.md) for the original transcription integration. The earlier [v0.2.0](https://github.com/Tomaski47/scrrec-app/releases/tag/v0.2.0) contains the reliability release.
 
 Screen Recorder is a Sadilek Innovation project built from a Bolt DIY start, refined through the 2025 app pass, and refreshed in 2026 with a cleaner UI and a more stable source-selection flow.
 
@@ -81,7 +81,7 @@ Run linting, the recorder lifecycle regression tests, type checking, and a produ
 npm run check
 ```
 
-See [Release 0.3.0](docs/RELEASE_0.3.0.md) for the current release and [Release 0.2.0](docs/RELEASE_0.2.0.md) for the earlier reliability checks.
+See [Release 0.3.1](docs/RELEASE_0.3.1.md) for the current release and [Release 0.2.0](docs/RELEASE_0.2.0.md) for the earlier reliability checks.
 
 The main recorder includes English local transcription. Select Mic, enable Local transcription, and wait for Local model: loaded before recording. Expand the arrow beside Local transcription to manage the model, including while the checkbox is off. Enabling the option automatically prepares the model; the speech engine downloads nothing until you enable transcription or explicitly choose Load model. If it is not ready, Start Recording asks you to wait, retry, or explicitly record without transcription. Tiny runs on the device using the selected microphone streams; transcription errors or cancellation do not stop recording. Each recording session has a transcript with copy, TXT and JSON export. Starting another recording collapses earlier results into Previous sessions without deleting them; use Clear All to remove them explicitly.
 
