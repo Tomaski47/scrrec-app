@@ -24,6 +24,9 @@
 .speech-info > summary:focus-visible { outline: 3px solid #13cbb4; outline-offset: 3px; }
 .recorder-panel .transcription-option .speech-info p { margin: 6px 0; }
 .speech-cache-message { font-size: .85rem; }
+.speech-interruption { margin: 8px 0; padding: 10px 12px; border-left: 2px solid #c99e54; font-size: .82rem; text-align: left; }
+.speech-interruption p { margin: 0 0 8px; }
+.speech-gap-list { padding-left: 18px; font-size: .82rem; font-variant-numeric: tabular-nums; }
 .speech-details-list { margin: 6px 0 10px; padding-left: 18px; font-size: .82rem; line-height: 1.45; }
 .speech-details-list li { margin: 0 0 8px; }
 .speech-model-id { display: block; opacity: .7; font-size: .75rem; overflow-wrap: anywhere; }

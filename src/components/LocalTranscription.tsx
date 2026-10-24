@@ -1,15 +1,16 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { sessionText, type SpeechSession, type SpeechSnapshot } from '../transcription/controller';
+import { sessionExportText, type SpeechSession, type SpeechSnapshot } from '../transcription/controller';
 import { MODELS, RETIRED_MODELS } from '../transcription/protocol';
 import { TranscriptionLicenses } from './TranscriptionLicenses';
 import './LocalTranscription.css';
 
-interface Props { enabled: boolean; setEnabled: (enabled: boolean) => void; recording: boolean; hasMic: boolean; speech: SpeechSnapshot; prepare: () => void; unload: () => void }
-export function LocalTranscription({ enabled, setEnabled, recording, hasMic, speech, prepare, unload }: Props) {
+interface Props { enabled: boolean; setEnabled: (enabled: boolean) => void; recording: boolean; hasMic: boolean; speech: SpeechSnapshot; prepare: () => void; unload: () => void; resume: () => void }
+export function LocalTranscription({ enabled, setEnabled, recording, hasMic, speech, prepare, unload, resume }: Props) {
   const [cacheMessage, setCacheMessage] = useState('');
   const [removing, setRemoving] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const panelId = useId();
+  const paused = recording && enabled && speech.sessions.some(session => session.capturing && session.paused);
   const modelLabel = speech.modelStatus === 'ready' ? 'Loaded' : speech.modelStatus === 'loading' ? 'Loading' : speech.modelStatus === 'error' ? 'Error' : 'Not loaded';
   const removeCache = async () => {
     unload();
@@ -50,14 +51,14 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
               : <button className="mini-action" disabled={recording || removing} onClick={prepare}>{speech.modelStatus === 'error' ? 'Retry preparation' : 'Load model'}</button>}
           {!recording && <button className="mini-action" disabled={removing} onClick={() => void removeCache()}>Remove model</button>}
         </div>
-        {speech.message && (speech.modelStatus === 'error' || (speech.modelStatus === 'ready' && (enabled || recording))) && <p className={`speech-status${speech.modelStatus === 'error' ? ' speech-warning' : ''}`} role={speech.modelStatus === 'error' ? 'alert' : 'status'}>{speech.message}</p>}
+        {speech.message && ((speech.modelStatus === 'error' && !recording) || (speech.modelStatus === 'ready' && (enabled || recording))) && <p className={`speech-status${speech.modelStatus === 'error' ? ' speech-warning' : ''}`} role={speech.modelStatus === 'error' ? 'alert' : 'status'}>{speech.message}</p>}
         <details className="speech-info">
           <summary>About transcription</summary>
           <ul className="speech-details-list">
             <li><strong>Speech model:</strong> <a href={`https://huggingface.co/${MODELS.tiny.id}`} target="_blank" rel="noreferrer">Whisper Tiny (English)</a> <span className="speech-model-id">{MODELS.tiny.id}</span></li>
             <li><strong>First download:</strong> About 60 MB from Hugging Face, cached on this device when available.</li>
             <li><strong>Model controls:</strong> Unload frees memory. Remove also deletes its cached download.</li>
-            <li><strong>On iPhone/iPad:</strong> Switching apps or locking the screen may interrupt transcription.</li>
+            <li><strong>On iPhone/iPad:</strong> Switching apps or locking the screen may interrupt transcription. It tries to resume automatically; if needed, return here and tap Resume transcription. Possible missing speech is marked.</li>
             <li><strong>Your text:</strong> Review important details and save recordings and transcripts before closing this tab.</li>
           </ul>
           <TranscriptionLicenses />
@@ -65,6 +66,11 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
         {cacheMessage && <p className="speech-cache-message speech-footnote" role="status">{cacheMessage}</p>}
       </div>
     </section>
+    {paused && <div className="speech-interruption" role="status">
+      <p>Transcription paused. Trying to resume automatically. If needed, return to this tab and tap Resume transcription. Check the saved recording for missing audio.</p>
+      <button className="mini-action" onClick={resume}>Resume transcription</button>
+    </div>}
+    {recording && enabled && speech.modelStatus === 'error' && <p className="speech-interruption" role="alert">Transcription stopped. {speech.message}</p>}
   </div>;
 }
 
@@ -79,16 +85,19 @@ function TranscriptCard({ session }: { session: SpeechSession }) {
     if (text && follow.current) text.scrollTop = text.scrollHeight;
   }, [session.blocks, session.draft]);
   const download = (json: boolean) => {
-    const body = json ? JSON.stringify({ ...session, runtime: 'transformers.js 4.3.0', text: sessionText(session) }, null, 2) : sessionText(session);
+    const body = json ? JSON.stringify({ ...session, runtime: 'transformers.js 4.3.0', text: sessionExportText(session) }, null, 2) : sessionExportText(session);
     const url = URL.createObjectURL(new Blob([body], { type: json ? 'application/json' : 'text/plain;charset=utf-8' }));
     const anchor = document.createElement('a'); anchor.href = url;
     anchor.download = `transcript-${session.createdAt.replace(/[:.]/g, '-')}.${json ? 'json' : 'txt'}`; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
   };
   return <article className="local-transcription transcript-card" id={`transcript-${session.id}`}>
-    <div className="speech-title"><h3>Session transcript</h3><span>{session.incomplete ? 'Incomplete' : session.finished ? 'Finished' : session.capturing ? 'Listening' : 'Finishing…'}</span></div>
+    <div className="speech-title"><h3>Session transcript</h3><span>{session.paused ? 'Paused' : session.capturing ? 'Listening' : session.incomplete ? 'Incomplete' : session.finished ? 'Finished' : 'Finishing…'}</span></div>
     <p>{new Date(session.createdAt).toLocaleString()} · {session.source}</p>
     {session.incomplete && <p role="status">{session.incomplete}</p>}
+    {session.interruptions.length > 0 && <ul className="speech-gap-list" aria-label="Transcription interruptions">
+      {session.interruptions.map((gap, index) => <li key={index}>{time(gap.start)}{gap.end === undefined ? ' onward' : `–${time(gap.end)}`} · Speech may be missing.</li>)}
+    </ul>}
     <div className="transcript-text" ref={textRef} onScroll={event => {
       const text = event.currentTarget;
       follow.current = text.scrollHeight - text.clientHeight - text.scrollTop < 60;
@@ -101,7 +110,7 @@ function TranscriptCard({ session }: { session: SpeechSession }) {
     <div className="speech-actions">
       <button className="mini-action" onClick={() => {
         if (!navigator.clipboard?.writeText) { setFeedback('Copy unavailable. Use Save TXT.'); return; }
-        void navigator.clipboard.writeText(sessionText(session)).then(() => setFeedback('Copied.'), () => setFeedback('Copy unavailable. Use Save TXT.'));
+        void navigator.clipboard.writeText(sessionExportText(session)).then(() => setFeedback('Copied.'), () => setFeedback('Copy unavailable. Use Save TXT.'));
       }}>Copy text</button>
       <button className="mini-action" onClick={() => download(false)}>Save TXT</button>
       <button className="mini-action" onClick={() => download(true)}>Save JSON</button>
