@@ -1,7 +1,7 @@
 {
   "name": "scrrec-app",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A local-first browser screen, camera, and microphone recorder from Sadilek Innovation.",
   "license": "MIT",
   "author": "Sadilek Innovation",

@@ -45,7 +45,7 @@ jobs:
           curl --fail --silent -D /tmp/headers http://localhost:8080/favicon.svg -o /dev/null
           grep -qi 'x-content-type-options: nosniff' /tmp/headers
           test "$(curl --silent -o /dev/null -w '%{http_code}' http://localhost:8080/missing.js)" = 404
-          for path in recorder-preview/local-8-710e39f/ transcription-preview/iphone-2/ release-check/ experiments/transcription.html whisper-test.html; do
+          for path in recorder-preview/local-8-710e39f/ transcription-preview/iphone-2/ release-check/ experiments/transcription.html whisper-test.html review/transcription-recovery-a review/transcription-recovery-a/ review/transcription-recovery-b review/transcription-recovery-b/; do
             test "$(curl --silent -o /dev/null -w '%{http_code}' "http://localhost:8080/$path")" = 404
           done
           curl --silent -D /tmp/redirect http://localhost:8080/og -o /dev/null
