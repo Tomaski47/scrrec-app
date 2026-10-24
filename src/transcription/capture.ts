@@ -63,8 +63,10 @@ export class MicrophoneTap implements CaptureTap {
     this.context.onstatechange = () => {
       if (!this.active || this.closed || this.ending) return;
       if (this.context.state === 'closed') callbacks.failure('Audio processing closed. Existing text is kept; recording is managed separately.');
-      else if (this.context.state !== 'running') this.pause();
-      else this.resume();
+      else {
+        if (this.context.state !== 'running') this.pause();
+        this.resume();
+      }
     };
     const visibility = environment.visibility ?? globalThis.document;
     const events = environment.events ?? globalThis.window;
@@ -91,9 +93,13 @@ export class MicrophoneTap implements CaptureTap {
         this.lastAudioAt = this.now();
         this.segmenter.push(this.resampler!.push(data));
       };
-      const mute = this.context.createGain(); mute.gain.value = 0;
-      tap.connect(mute); mute.connect(this.context.destination);
-      this.nodes.push(tap, mute);
+      // Keep this a processing-only graph. A connection to the speaker output,
+      // even through zero gain, opts out of WebKit's background exemption.
+      // The worklet writes no output; this private sink only keeps it rendering.
+      const sink = this.context.createMediaStreamDestination();
+      tap.connect(sink);
+      this.nodes.push(tap, sink);
+      this.cleanup.push(() => sink.stream.getTracks().forEach(track => track.stop()));
       for (const stream of streams) {
         for (const track of stream.getAudioTracks()) {
           this.tracks.push(track);
@@ -149,11 +155,11 @@ export class MicrophoneTap implements CaptureTap {
   resume() {
     if (!this.active || this.closed || this.ending || this.resuming || this.muted()) return;
     if (this.now() - this.lastAudioAt > 3000) this.pause();
-    if ((this.environment.visibility ?? globalThis.document)?.hidden) return;
     if (!this.interruption && this.context.state === 'running') return;
     this.resuming = true;
     // Resume the existing tap only. Never acquire a microphone or touch the
-    // MediaRecorder streams. Some Safari interruptions need a user gesture.
+    // MediaRecorder streams. Try in background too when the browser permits it;
+    // some Safari interruptions still need a foreground user gesture.
     void bounded(this.context.resume(), 2500).then(() => {
       if (!this.closed && !this.ending && this.active && this.context.state === 'running') this.tap?.port.postMessage('start');
     }).catch(() => { /* Stay paused; the visible Resume button permits a gesture. */ })

@@ -85,7 +85,7 @@ Keep transcripts in the tab by default, with explicit export and optional recove
 
 ## Phone interruption recovery
 
-The v0.3.1 recovery candidate retains the transcription tap across audio interruptions, resumes on return or a user gesture, and marks possible gaps in UI and exports. [Recovery evidence](experiments/TRANSCRIPTION_INTERRUPTION_RECOVERY.md) includes native-context and real-model browser checks; it does not establish physical-iPhone screen-off endurance. Next prioritize catch-up from saved microphone audio so speech recorded while recognition is suspended can be processed after unlock or Stop. Use bounded decoding and explicit coverage; never imply recovery of audio the browser failed to record.
+The goal is continuous mobile microphone capture and transcription while switching apps or locking the phone, wherever the browser permits it. The v0.3.1 candidate uses a processing-only audio graph with no speaker connection, attempts recovery while hidden, retains the transcription tap across interruptions and marks possible gaps in UI and exports. [Recovery evidence](experiments/TRANSCRIPTION_INTERRUPTION_RECOVERY.md) includes native-context and real-model checks; it does not establish physical-iPhone screen-off endurance. Validate the microphone/Whisper pipeline on iPhone Safari, Chrome and Brave. If the OS suspends inference while native audio recording continues, catch up from saved microphone audio after return or Stop, with bounded decoding and explicit coverage. Never imply recovery of audio the browser failed to record. Phone camera background restrictions are a separate platform limitation.
 
 ## Separate audio-capture follow-up
 

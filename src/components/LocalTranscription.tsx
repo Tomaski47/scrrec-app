@@ -58,7 +58,7 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
             <li><strong>Speech model:</strong> <a href={`https://huggingface.co/${MODELS.tiny.id}`} target="_blank" rel="noreferrer">Whisper Tiny (English)</a> <span className="speech-model-id">{MODELS.tiny.id}</span></li>
             <li><strong>First download:</strong> About 60 MB from Hugging Face, cached on this device when available.</li>
             <li><strong>Model controls:</strong> Unload frees memory. Remove also deletes its cached download.</li>
-            <li><strong>On iPhone/iPad:</strong> Locking the screen may pause transcription. On return, it tries to resume; if needed, tap Resume transcription. Missed speech is marked and is not filled in automatically.</li>
+            <li><strong>On iPhone/iPad:</strong> Switching apps or locking the screen may interrupt transcription. It tries to resume automatically; if needed, return here and tap Resume transcription. Possible missing speech is marked.</li>
             <li><strong>Your text:</strong> Review important details and save recordings and transcripts before closing this tab.</li>
           </ul>
           <TranscriptionLicenses />
@@ -67,7 +67,7 @@ export function LocalTranscription({ enabled, setEnabled, recording, hasMic, spe
       </div>
     </section>
     {paused && <div className="speech-interruption" role="status">
-      <p>Transcription paused. Resume after unlocking. Check the saved recording for any missing audio.</p>
+      <p>Transcription paused. Trying to resume automatically. If needed, return to this tab and tap Resume transcription. Check the saved recording for missing audio.</p>
       <button className="mini-action" onClick={resume}>Resume transcription</button>
     </div>}
     {recording && enabled && speech.modelStatus === 'error' && <p className="speech-interruption" role="alert">Transcription stopped. {speech.message}</p>}

@@ -140,7 +140,7 @@ export class TranscriptionController {
           entry.view.paused = gap.end === undefined;
           entry.view.incomplete = 'Audio processing was interrupted. Some speech may be missing; check the saved recording.';
           this.message = resumed ? 'Transcription resumed. The interrupted interval is marked in your transcript.'
-            : gap.end === undefined ? 'Transcription paused. Resume after unlocking your device.'
+            : gap.end === undefined ? 'Transcription paused. Trying to resume automatically; return to this tab if needed.'
               : 'Transcription ended with an interrupted interval. Check the saved recording for missing speech.';
           this.publish();
         },

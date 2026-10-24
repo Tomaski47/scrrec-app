@@ -10,13 +10,16 @@ class Visibility extends EventTarget {
 }
 class AudioNodeFake {
   gain = { value: 1 }; disconnected = false;
-  connect(node: AudioNodeFake) { return node; }
+  outputs: AudioNodeFake[] = [];
+  connect(node: AudioNodeFake) { this.outputs.push(node); return node; }
   disconnect() { this.disconnected = true; }
 }
 class ContextFake {
   state = 'running'; sampleRate = 48000; resumes = 0; closes = 0; denied = false;
   onstatechange: (() => void) | null = null;
   destination = new AudioNodeFake();
+  sinkTrack = new Track();
+  sink = Object.assign(new AudioNodeFake(), { stream: { getTracks: () => [this.sinkTrack] } });
   resumeBarrier: Promise<void> | undefined;
   audioWorklet = { addModule: async () => undefined };
   change(state: string) { this.state = state; this.onstatechange?.(); }
@@ -29,6 +32,7 @@ class ContextFake {
   async close() { this.closes++; this.change('closed'); }
   createGain() { return new AudioNodeFake(); }
   createMediaStreamSource() { return new AudioNodeFake(); }
+  createMediaStreamDestination() { return this.sink; }
 }
 class Track extends EventTarget { muted = false; readyState = 'live'; stops = 0; stop() { this.stops++; } }
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -50,20 +54,48 @@ function setup() {
     visibility: visibility as unknown as Document, events: events as unknown as Window, now: () => now,
   });
   const stream = { getAudioTracks: () => [track] } as unknown as MediaStream;
-  return { tap, context, visibility, events, track, segments, gaps, failures, messages, port,
+  return { tap, context, visibility, events, track, segments, gaps, failures, messages, port, node,
     attach: () => tap.attach([stream]), time: (ms: number) => { now = ms; },
     audio: () => port.onmessage?.({ data: new Float32Array(24000).fill(0.1) }) };
 }
+
+test('the PCM graph has a private sink, never connects to speakers and releases only its own output track', async () => {
+  const s = setup();
+  await s.attach(); s.tap.activate();
+  assert.deepEqual(s.node.outputs, [s.context.sink]);
+  assert.deepEqual(s.context.sink.outputs, []);
+  await s.tap.finish(); s.tap.abort();
+  assert.equal(s.context.sinkTrack.stops, 1);
+  assert.equal(s.track.stops, 0);
+});
+
+test('background capture continues and can resume after a transient interruption without waiting for visibility', async () => {
+  const s = setup();
+  try {
+    await s.attach(); s.tap.activate(); s.time(500); s.audio();
+    s.visibility.set(true); s.time(1000); s.audio();
+    assert.equal(s.gaps.length, 0, 'Hiding a healthy page must not pause capture');
+    const resumes = s.context.resumes;
+    s.context.change('interrupted'); await tick();
+    assert.ok(s.context.resumes > resumes);
+    assert.equal(s.context.state, 'running');
+    s.time(2000); s.audio();
+    assert.equal(s.gaps.at(-1)?.resumed, true);
+    assert.equal(s.visibility.hidden, true);
+    assert.equal(s.track.stops, 0);
+  } finally { s.tap.abort(); }
+});
 
 test('unlock resumes the existing PCM tap, preserves the preceding phrase and leaves a timestamped gap', async () => {
   const s = setup();
   try {
     await s.attach(); s.tap.activate(); s.time(500); s.audio();
-    s.visibility.set(true); s.time(1000); s.context.change('interrupted');
+    s.context.denied = true;
+    s.visibility.set(true); s.time(1000); s.context.change('interrupted'); await tick();
     assert.equal(s.context.closes, 0); assert.equal(s.track.stops, 0); assert.deepEqual(s.failures, []);
     assert.equal(s.segments.length, 1, 'The pre-lock final phrase must not be discarded');
     const resumes = s.context.resumes;
-    s.time(7000); s.visibility.set(false); await tick();
+    s.context.denied = false; s.time(7000); s.visibility.set(false); await tick();
     assert.ok(s.context.resumes > resumes); assert.equal(s.context.state, 'running');
     assert.equal(s.gaps.length, 1, 'Resume must wait for real PCM before claiming Listening');
     s.audio(); s.time(7500); await s.tap.finish();
