@@ -20,6 +20,15 @@ body.light-mode .app-dialog { background: #f6f8fc; color: #151b28; }
 .recording-card video { width: 100%; max-height: 420px; object-fit: contain; }
 .recording-card audio { max-width: 100%; }
 .recording-metadata, .save-feedback { font-size: 0.9rem; line-height: 1.5; overflow-wrap: anywhere; }
+.local-save-status { margin: 1rem 0; color: var(--text-secondary, #b9b5c7); font-size: .875rem; line-height: 1.5; text-align: left; }
+.local-save-status > p { margin: .35rem 0; }
+.local-save-status details { max-width: 68ch; }
+.local-save-status summary { cursor: pointer; width: fit-content; }
+.local-save-status details p { margin: .65rem 0; }
+.App .recorder-panel .local-save-status p { color: inherit; font-size: inherit; line-height: inherit; text-align: inherit; }
+.local-save-error { color: #d6a966; }
+.App.light-mode .local-save-status { color: #4b5565; }
+.App.light-mode .local-save-error { color: #865116; }
 :is(button, input, select, summary, a):focus-visible { outline: 3px solid #ad78ff; outline-offset: 4px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

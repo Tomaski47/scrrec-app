@@ -90,6 +90,20 @@ test('completed outputs survive a failed next start and a successful next record
   assert.equal(f.revoked.length, 2);
 });
 
+test('restoring completed media recreates playback URLs and subsequent captures keep unique IDs and session associations', async () => {
+  const first = fixture(); await record(first);
+  const saved = first.outputs()[0], next = fixture();
+  const { url: _url, ...file } = saved; void _url;
+  next.session.restore([file]); next.session.restore([file]);
+  assert.equal(next.outputs().length, 1); assert.equal(next.outputs()[0].id, saved.id);
+  assert.equal(next.outputs()[0].sessionId, saved.sessionId); assert.equal(next.recorders.length, 0);
+  await record(next);
+  assert.equal(next.outputs().length, 2); assert.notEqual(next.outputs()[1].id, saved.id);
+  assert.notEqual(next.outputs()[1].sessionId, saved.sessionId);
+  assert.equal(await next.outputs()[0].blob.text(), await saved.blob.text());
+  next.session.dispose(); first.session.dispose();
+});
+
 test('startup is locked before an asynchronous picker completes; cancelling releases a late stream', async () => {
   const f = fixture();
   const input = media();

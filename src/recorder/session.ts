@@ -20,6 +20,7 @@ export interface CompletedRecording {
   duration: number;
   partial: boolean;
 }
+export type RecordingCheckpoint = Omit<CompletedRecording, 'blob' | 'url'> & { mime: string };
 
 export interface Acquisition {
   sessionId: string;
@@ -33,6 +34,8 @@ interface Callbacks {
   recordings: (recordings: CompletedRecording[]) => void;
   bytes: (bytes: number) => void;
   message: (message: string) => void;
+  checkpoint?: (recording: RecordingCheckpoint, index: number, blob: Blob) => void;
+  completed?: (recording: CompletedRecording) => void;
 }
 
 interface Platform {
@@ -46,6 +49,7 @@ interface Platform {
 }
 
 interface Entry {
+  id: string;
   source: RecordingSource;
   recorder: MediaRecorder;
   chunks: Blob[];
@@ -108,7 +112,6 @@ export class RecordingSession {
   private platform: Platform;
   private run: Run | null = null;
   private outputs: CompletedRecording[] = [];
-  private sequence = 0;
   private disposed = false;
   state: SessionState = 'idle';
   startedAt: number | null = null;
@@ -137,6 +140,21 @@ export class RecordingSession {
   }
 
   get recordings(): readonly CompletedRecording[] { return this.outputs; }
+
+  restore(recordings: Array<Omit<CompletedRecording, 'url'>>) {
+    if (this.disposed) return;
+    const ids = new Set(this.outputs.map(output => output.id));
+    this.outputs.push(...recordings.filter(file => !ids.has(file.id)).map(file => ({ ...file, url: this.platform.createURL(file.blob) })));
+    this.callbacks.recordings([...this.outputs]);
+  }
+
+  private checkpoint(run: Run, entry: Entry): RecordingCheckpoint {
+    const createdAt = new Date(entry.startedAt ?? this.platform.now());
+    const mime = entry.recorder.mimeType || entry.chunks[0]?.type || '';
+    return { id: entry.id, sessionId: run.id, label: entry.source.label, kind: entry.source.kind, mime,
+      filename: recordingFilename(entry.source.kind, mime, createdAt, entry.id), createdAt,
+      duration: Math.max(0, this.platform.now() - createdAt.getTime()) / 1000, partial: run.partial };
+  }
 
   async start(acquire: (owner: Acquisition) => Promise<RecordingSource[]>, quality: AudioQuality): Promise<boolean> {
     // This lock is synchronous, before acquisition or a React render can yield.
@@ -186,13 +204,14 @@ export class RecordingSession {
         ));
         let complete!: () => void;
         const entry: Entry = {
-          source, recorder, chunks: [], finished: false, startedAt: null,
+          id: crypto.randomUUID(), source, recorder, chunks: [], finished: false, startedAt: null,
           done: new Promise<void>(r => { complete = r; }), complete: () => complete(),
         };
         run.entries.push(entry);
         recorder.ondataavailable = event => {
           if (!entry.finished && event.data.size) {
             entry.chunks.push(event.data);
+            this.callbacks.checkpoint?.(this.checkpoint(run, entry), entry.chunks.length - 1, event.data);
             run.bytes += event.data.size;
             if (!this.disposed) this.callbacks.bytes(run.bytes);
           }
@@ -248,13 +267,11 @@ export class RecordingSession {
     if (entry.chunks.length && !this.disposed) {
       const mime = entry.recorder.mimeType || entry.chunks.find(chunk => chunk.type)?.type || '';
       const blob = new Blob(entry.chunks, { type: mime });
-      const id = String(++this.sequence);
-      const createdAt = new Date(entry.startedAt ?? this.platform.now());
-      this.outputs = [...this.outputs, {
-        id, sessionId: run.id, label: entry.source.label, kind: entry.source.kind, blob,
-        url: this.platform.createURL(blob), filename: recordingFilename(entry.source.kind, mime, createdAt, id),
-        createdAt, duration: Math.max(0, this.platform.now() - createdAt.getTime()) / 1000, partial: run.partial,
-      }];
+      const { mime: _mime, ...metadata } = this.checkpoint(run, entry);
+      void _mime;
+      const file = { ...metadata, blob, url: this.platform.createURL(blob) };
+      this.outputs = [...this.outputs, file];
+      this.callbacks.completed?.(file);
       this.callbacks.recordings([...this.outputs]);
     }
     entry.chunks = [];
