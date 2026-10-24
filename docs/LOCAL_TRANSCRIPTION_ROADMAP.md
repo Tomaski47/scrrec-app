@@ -1,6 +1,6 @@
 # Local transcription and live assistance roadmap
 
-Updated: October 24, 2026. [v0.3.0](RELEASE_0.3.0.md) integrated optional English local transcription and removed the fixed live two-minute cutoff. [v0.3.1](RELEASE_0.3.1.md) is deployed with processing-only background audio and recoverable interruptions; the owner confirmed audio and text coverage while switching apps and locking an iPhone in Safari. The v0.4.0 [automatic local saving candidate](LOCAL_AUTOSAVE.md) adds refresh/reopen recovery separately from that live release. The model-comparison lab remains available for development.
+Updated: October 24, 2026. [v0.3.0](RELEASE_0.3.0.md) integrated optional English local transcription and removed the fixed live two-minute cutoff. [v0.3.1](RELEASE_0.3.1.md) is deployed with processing-only background audio and recoverable interruptions; the owner confirmed audio and text coverage while switching apps and locking an iPhone in Safari. v0.4.0 [automatic local saving](LOCAL_AUTOSAVE.md) adds refresh/reopen recovery; the owner confirmed retained recordings/text after force-quitting and reopening iPhone Safari. The model-comparison lab remains available for development.
 
 ## Product direction
 

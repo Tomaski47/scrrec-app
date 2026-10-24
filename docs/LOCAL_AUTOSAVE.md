@@ -1,6 +1,6 @@
 # Automatic local session saving
 
-October 24, 2026. Implementation candidate v0.4.0. Production v0.3.1 remains the verified background-transcription release until this candidate is reviewed and deployed.
+October 24, 2026. Release v0.4.0 adds local persistence to the v0.3.1 background-transcription behavior.
 
 ## Behavior
 
@@ -40,4 +40,4 @@ Chrome browser checks use real IndexedDB, native encoders and real Tiny/WASM rec
 - Simulated quota rejection left recording active, with playable/downloadable media and a visible storage-full warning. Simulated unavailable IndexedDB also permitted recording and playback while warning that local saving failed. These are controlled failure injections, not tests that fill the user's disk.
 - Restored-session and storage-error layouts have no horizontal overflow at 390 px dark and 320 px light. Theme screenshots wait for text-color transitions to settle before assessing contrast.
 
-Reports, generated media and screenshots are retained under `output/playwright/autosave/`, outside Git. Helpers are `scripts/browser-autosave-*.js`; generated-device setup uses `scripts/browser-recorder-transcription.js`. The interruption verification helper runs after a separate intentional reload, because the CLI can yield on an unload dialog before returning its callback result. New local-storage behavior has not yet been verified on a physical iPhone; v0.3.1's microphone/transcription background pass remains separate evidence.
+Reports, generated media and screenshots are retained under `output/playwright/autosave/`, outside Git. Helpers are `scripts/browser-autosave-*.js`; generated-device setup uses `scripts/browser-recorder-transcription.js`. The interruption verification helper runs after a separate intentional reload, because the CLI can yield on an unload dialog before returning its callback result. The owner subsequently tested the updated preview on a physical iPhone in Safari and reported preserved recordings/text after app switching, screen locking and force-quitting/reopening Safari, with recording/transcription still working well. This acceptance does not measure exact background inference timing or the final committed checkpoint; other mobile browsers and extended endurance remain unverified.

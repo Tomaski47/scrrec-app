@@ -1,6 +1,6 @@
-# 0.4.0 candidate — automatic local session saving
+# 0.4.0 — automatic local session saving
 
-October 24, 2026. Implemented for review; production remains v0.3.1 until this candidate is merged and deployed.
+October 24, 2026. [PR #13](https://github.com/Tomaski47/scrrec-app/pull/13) adds automatic browser-local recording and transcript recovery. This follows the v0.3.1 background-transcription release.
 
 Refreshing or closing the tab previously discarded media and text. The recorder now saves encoded media and transcript snapshots automatically in this browser profile and restores them when reopened. The app remains frontend-only; no upload or account service is added.
 
@@ -16,6 +16,10 @@ Refreshing or closing the tab previously discarded media and text. The recorder 
 
 All 60 unit tests, lint, application/test types and production/experiment builds pass locally. Real-browser checks cover exact media hashes and text after refresh, actual closed-tab reopening, committed partial data after an active refresh, playback, Clear All after reload, failure feedback, continued recording/download under simulated storage failures and narrow dark/light layouts. Model and device startup remain absent during restoration.
 
-[Storage design, evidence and reproduction](LOCAL_AUTOSAVE.md) distinguishes controlled failure injections from actual disk exhaustion. Physical-iPhone persistence, large saved libraries and extended endurance remain unverified. The already deployed v0.3.1 Safari background audio/transcript pass is separate from this new storage behavior.
+[Storage design, evidence and reproduction](LOCAL_AUTOSAVE.md) distinguishes controlled failure injections from actual disk exhaustion. The owner tested the updated preview on a physical iPhone in Safari and reported that recordings and text remained available after app switching, screen locking and force-quitting/reopening Safari; recording and transcription also worked well in that session. This is user-reported acceptance, not an instrumented measurement of background inference timing or the exact final checkpoint. Large saved libraries, extended endurance and other mobile browsers remain unverified.
 
 Explicit downloads remain useful backups: browser profiles/origins are separate, and storage quotas, eviction, private browsing or clearing site data can remove local copies. Catch-up transcription from saved audio, per-session deletion and bounded library/memory management remain follow-ups.
+
+## Deployment
+
+Deploy the merged main revision through Dokploy with its exact `BUILD_REVISION`, preserve the v0.3.1 image for rollback, then restore prior build arguments and autodeploy settings. Verify health, public version and asset hashes, real model readiness and all retired preview/test routes. Local-saving previews are retired with explicit 404 responses; their isolated browser data is not migrated into production or deleted remotely. Download anything needed from a preview before leaving it.

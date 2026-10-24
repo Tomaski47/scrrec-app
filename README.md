@@ -1,10 +1,10 @@
 # Screen Recorder
 
-A local-first browser recorder for screen, camera, and microphone capture. The live app is available at [screc.sadilekinnovation.com](https://screc.sadilekinnovation.com/). See [Release 0.3.1](docs/RELEASE_0.3.1.md) for background transcription and interruption recovery, and [Release 0.3.0](docs/RELEASE_0.3.0.md) for the original transcription integration. The earlier [v0.2.0](https://github.com/Tomaski47/scrrec-app/releases/tag/v0.2.0) contains the reliability release.
+A local-first browser recorder for screen, camera, and microphone capture. The live app is available at [screc.sadilekinnovation.com](https://screc.sadilekinnovation.com/). See [Release 0.4.0](docs/RELEASE_0.4.0.md) for automatic local saving, [Release 0.3.1](docs/RELEASE_0.3.1.md) for background transcription and interruption recovery, and [Release 0.3.0](docs/RELEASE_0.3.0.md) for the original transcription integration. The earlier [v0.2.0](https://github.com/Tomaski47/scrrec-app/releases/tag/v0.2.0) contains the reliability release.
 
 Screen Recorder is a Sadilek Innovation project built from a Bolt DIY start, refined through the 2025 app pass, and refreshed in 2026 with a cleaner UI and a more stable source-selection flow.
 
-The v0.4.0 development candidate adds [automatic local session saving](docs/LOCAL_AUTOSAVE.md). It is separate from the deployed v0.3.1 release until reviewed and deployed.
+v0.4.0 adds [automatic local session saving](docs/LOCAL_AUTOSAVE.md): recordings and transcripts restore in the same browser after refresh or reopening. The owner confirmed recovery after switching apps, locking the phone and force-quitting/reopening Safari on an iPhone.
 
 ## Features
 
@@ -92,7 +92,7 @@ Run linting, the recorder lifecycle regression tests, type checking, and a produ
 npm run check
 ```
 
-See [Release 0.3.1](docs/RELEASE_0.3.1.md) for the current release and [Release 0.2.0](docs/RELEASE_0.2.0.md) for the earlier reliability checks.
+See [Release 0.4.0](docs/RELEASE_0.4.0.md) for the current release and [Release 0.2.0](docs/RELEASE_0.2.0.md) for the earlier reliability checks.
 
 The main recorder includes English local transcription. Select Mic, enable Local transcription, and wait for Local model: loaded before recording. Expand the arrow beside Local transcription to manage the model, including while the checkbox is off. Enabling the option automatically prepares the model; the speech engine downloads nothing until you enable transcription or explicitly choose Load model. If it is not ready, Start Recording asks you to wait, retry, or explicitly record without transcription. Tiny runs on the device using the selected microphone streams; transcription errors or cancellation do not stop recording. Each recording session has a transcript with copy, TXT and JSON export. Starting another recording collapses earlier results into Previous sessions without deleting them; use Clear All to remove them explicitly.
 
@@ -111,7 +111,7 @@ docker build --build-arg BUILD_REVISION="$(git rev-parse HEAD)" -t screen-record
 docker run --rm -p 8080:80 screen-recorder
 ```
 
-Production excludes the research lab and retires temporary `/recorder-preview/`, `/transcription-preview/`, `/release-check/`, `/experiments/`, recovery previews A/B and Whisper test URLs with 404 responses. New preview builds isolate their saved-session database by base path so their Clear All cannot delete live session data.
+Production excludes the research lab and retires temporary `/recorder-preview/`, `/transcription-preview/`, `/release-check/`, `/experiments/`, recovery previews A/B, local-saving review previews and Whisper test URLs with 404 responses. New preview builds isolate their saved-session database by base path so their Clear All cannot delete live session data.
 
 The image includes `/healthz` and `/version.json` endpoints. HTML and release metadata revalidate; fingerprinted assets receive long cache lifetimes. Security headers include a report-only CSP pending production validation.
 
@@ -130,6 +130,9 @@ http://localhost:8080/
 
 ## Project Docs
 
+- [Release 0.4.0](docs/RELEASE_0.4.0.md)
+- [Automatic local saving and recovery](docs/LOCAL_AUTOSAVE.md)
+- [Release 0.3.1](docs/RELEASE_0.3.1.md)
 - [Release 0.3.0](docs/RELEASE_0.3.0.md)
 - [Release 0.2.0](docs/RELEASE_0.2.0.md)
 - [Known Issues and Future Work](docs/KNOWN_ISSUES_AND_FUTURE_WORK.md)

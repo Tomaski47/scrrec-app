@@ -1,6 +1,6 @@
 # Known Issues and Future Work
 
-Last updated: October 21, 2026
+Last updated: October 24, 2026
 
 ## Audit Follow-up: October 21
 
@@ -83,4 +83,4 @@ Continuity microphones and simultaneous mobile cameras remain exploratory work r
 
 v0.3.1 is deployed at the public app, revision `1fbc67763b9b0e72824d560bb87b701d7d2335b7`. All 18 published files matched the successful main build, all 18 retired test URLs returned 404, the live model and inline license loaded, and production stayed healthy. The owner confirmed continuous microphone audio and transcript coverage while another app was open and the iPhone was locked in Safari. Exact inference timing while locked and other mobile browsers were not measured.
 
-The v0.4.0 local-saving candidate is implemented separately from that deployed release. It adds persistent browser session storage and refresh/reopen recovery, not automatic continuation of recording or encoded-audio transcription after a crash. Broader human speech comparisons, offline startup, transcript editing, bounded long-file decoding and resource limits remain follow-ups. The lab's 20 MB / 60-second file limit is separate from live capture.
+v0.4.0 adds automatic local session saving after that background-recovery release. The owner confirmed Safari recording/text recovery after app switching, locking and force-quitting/reopening on a physical iPhone. It adds persistent browser session storage and refresh/reopen recovery, not automatic continuation of recording or encoded-audio transcription after a crash. Broader human speech comparisons, offline startup, transcript editing, bounded long-file decoding and resource limits remain follow-ups. The lab's 20 MB / 60-second file limit is separate from live capture.
