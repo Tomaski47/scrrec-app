@@ -3,7 +3,7 @@ async(page)=>{
  await page.waitForFunction(()=>window.recorderTest?.resultCount>=2,undefined,{timeout:60000});
  await page.getByRole('button',{name:'Stop Recording',exact:true}).click();
  await page.locator('.speech-title > span').getByText('Finished',{exact:true}).waitFor({timeout:60000});
- await page.getByText('Saved in this browser.',{exact:true}).waitFor();
+ await page.waitForFunction(()=>new Promise((resolve,reject)=>{const request=indexedDB.open('scrrec-local-sessions',1);request.onerror=()=>reject(request.error);request.onsuccess=()=>{const db=request.result,tx=db.transaction(['recordings','transcripts'],'readonly'),filesRequest=tx.objectStore('recordings').getAll();const textsRequest=tx.objectStore('transcripts').getAll(); tx.oncomplete=()=>{const files=filesRequest.result;const texts=textsRequest.result; db.close();resolve(files.length===2&&files.every(file=>file.finished)&&texts[0]?.finished);};tx.onabort=()=>{db.close();reject(tx.error);};};}));
  const before=await page.evaluate(async()=>{
   const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('scrrec-local-sessions',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
   const tx=db.transaction(['recordings','chunks','transcripts'],'readonly');

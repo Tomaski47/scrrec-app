@@ -12,7 +12,7 @@ Transcript snapshots include stable paragraphs, the latest recognized draft, tim
 
 ## Controls and failures
 
-- The compact save status distinguishes restoring, saving, saved and storage failures. Saved reflects an IndexedDB transaction completing, rather than a write merely being queued.
+- The recorder stays quiet during routine saves. Technical Details explains automatic local saving, retention, Clear All and partial recovery; storage failures appear beside the recorder as actionable warnings. Writes commit through IndexedDB transactions rather than relying on a queued write completing at unload.
 - Clear All deletes the library's media, chunks and transcripts and unloads the active speech model. It does not remove the separately cached model download. A generation marker rejects stale writes from other tabs after clearing; those tabs retain their in-memory results for downloading and must refresh to restart automatic saving.
 - Storage failures never stop MediaRecorder or silently delete prior data. The app warns the user to download files/text before leaving. Startup remains usable if IndexedDB cannot open. Foreground storage operations are bounded; browser suspension does not by itself trigger a false timeout.
 - The library is device/browser/profile/origin specific. Private browsing, storage pressure, eviction and clearing site data can remove copies. Explicit downloads remain the recommended separate backup.

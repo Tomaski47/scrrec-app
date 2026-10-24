@@ -9,7 +9,7 @@ Refreshing or closing the tab previously discarded media and text. The recorder 
 - IndexedDB stores incoming media checkpoints, finalized files and recognized transcript snapshots. A completed file replaces its checkpoints atomically. File/session UUIDs preserve association without colliding with restored sessions.
 - Restore recreates local playback URLs and preserves stable/draft text, metadata, timestamps and incomplete-state notices. It does not reopen devices, load the model or restart capture.
 - An interrupted capture restores only committed data and is marked partial. Its last unsaved portion can be missing; unfinished containers may not play. Restored text exports include the recovery warning.
-- Compact save status reports restoring, pending writes, committed saves and quota/unavailable-storage failures. Storage failures preserve in-memory recording/export. Clear All deletes saved session data; stale tabs cannot silently recreate cleared records. Preview storage is isolated from the live library.
+- Routine save information lives in Technical Details, keeping the initial recorder clean. Quota/unavailable-storage failures remain visible beside the recorder. Storage failures preserve in-memory recording/export. Clear All deletes saved session data; stale tabs cannot silently recreate cleared records. Preview storage is isolated from the live library.
 - Update the privacy wording, technical milestones, features, tools and stack to include the October reliability/transcription releases, background recovery and local saving. The test-only fake-indexeddb dependency adds no runtime database library.
 
 ## Validation and remaining scope
