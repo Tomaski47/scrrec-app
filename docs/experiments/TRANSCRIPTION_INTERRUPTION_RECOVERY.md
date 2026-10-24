@@ -25,6 +25,8 @@ An iPhone microphone session kept showing Recording after screen lock, but trans
 
 Local generated media, transcript exports, measurements and screenshots are kept under `output/playwright/recovery/`, outside Git. No personal audio was used.
 
+The initial hosted source check passed tests/builds but failed its dependency audit on Zod. The lint plugin's transitive Zod dependency is updated from 4.6.5 to 4.6.7, fixing [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5). It is a development lint dependency; the recorder's pinned speech engine/model are unchanged. The local dependency audit then reports zero vulnerabilities.
+
 ## Reproduce
 
 Use Node 24 and the Playwright CLI skill with a compiled build served on localhost. Prepare the generated `output/transcription-benchmark/reference.wav` fixture described in [Preview 3](LOCAL_TRANSCRIPTION_03.md). Install `scripts/browser-recorder-transcription.js`, then run these localhost-only helpers with the CLI's run-code command:
