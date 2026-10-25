@@ -1,5 +1,5 @@
 # Stage 1: Build the app
-FROM node:24-alpine AS builder
+FROM node:25-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 # Browser-only inference does not use the optional native GPU downloads.
